@@ -1,0 +1,14 @@
+Options -Indexes
+RewriteEngine On
+
+# Correct MIME types
+AddType application/manifest+json .json
+AddType text/javascript .js
+
+# Serve static files directly (don't route through PHP)
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^ - [L]
+
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [QSA,L]
