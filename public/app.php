@@ -201,31 +201,24 @@ session_start();
 <script src="/public/assets/js/pages/customers.js"></script>
 <script src="/public/assets/js/pages/dashboard.js"></script>
 <script src="/public/assets/js/pages/orders.js"></script>
-<script src="/public/assets/js/offline.js"></script>
 <script src="/public/assets/js/pages/settings.js"></script>
 <script src="/public/assets/js/pages/stock.js"></script>
 <script src="/public/assets/js/pages/expenses.js"></script>
 <script src="/public/assets/js/pages/reports.js"></script>
-
+<script src="/public/assets/js/offline.js"></script>
 <script>
-// Register Service Worker
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', async () => {
-        try {
-            const reg = await navigator.serviceWorker.register('/public/service-worker.js');
-            console.log('[SW] Registered:', reg.scope);
-
-            // Listen for sync messages from SW
-            navigator.serviceWorker.addEventListener('message', event => {
-                if (event.data?.type === 'SYNC_START') {
-                    SyncManager.syncPendingOrders();
-                }
-            });
-        } catch (err) {
-            console.warn('[SW] Registration failed:', err);
-        }
-    });
-}
+    // Register Service Worker for PWA install + static caching only
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', async () => {
+            try {
+                const reg = await navigator.serviceWorker.register(
+                    '/public/service-worker.js');
+                console.log('[SW] Registered:', reg.scope);
+            } catch (err) {
+                console.warn('[SW] Registration failed:', err);
+            }
+        });
+    }
 </script>
 </body>
 </html>

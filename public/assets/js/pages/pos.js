@@ -16,21 +16,9 @@ const POSPage = {
     async load() {
         document.getElementById('page-content').innerHTML = `
             <div class="pos-layout">
-
-                <!-- Left: Products -->
                 <div class="pos-products">
-
-                    <!-- Search + Category Tabs -->
                     <div style="display:flex;flex-direction:column;gap:12px;">
                         <div style="display:flex;gap:10px;align-items:center;">
-                            <div id="pos-offline-banner"
-                                style="display:none;background:var(--warning-light);
-                                color:var(--warning);padding:8px 14px;
-                                border-radius:var(--radius-sm);font-size:12px;
-                                font-weight:600;align-items:center;
-                                gap:6px;flex-shrink:0;">
-                                <i class="fas fa-exclamation-triangle"></i> OFFLINE MODE
-                            </div>
                             <div class="search-box" style="flex:1;">
                                 <i class="fas fa-search"></i>
                                 <input type="text" id="pos-search"
@@ -53,7 +41,6 @@ const POSPage = {
                         </div>
                     </div>
 
-                    <!-- Products Grid -->
                     <div class="products-grid" id="products-grid">
                         ${[1,2,3,4,5,6].map(() => `
                             <div class="skeleton"
@@ -62,7 +49,6 @@ const POSPage = {
                     </div>
                 </div>
 
-                <!-- Right: Cart -->
                 <div class="pos-cart">
                     <div class="cart-header">
                         <div class="cart-title">
@@ -76,7 +62,6 @@ const POSPage = {
                         </button>
                     </div>
 
-                    <!-- Cart Items -->
                     <div class="cart-items" id="cart-items">
                         <div class="cart-empty">
                             <i class="fas fa-shopping-basket"></i>
@@ -85,21 +70,17 @@ const POSPage = {
                         </div>
                     </div>
 
-                    <!-- Cart Summary -->
                     <div class="cart-summary">
-
-                        <!-- Customer -->
                         <div class="summary-row" id="customer-summary-row"
                             style="display:none;">
                             <span>
-                                <i class="fas fa-user" style="margin-right:4px;"></i>
-                                Customer
+                                <i class="fas fa-user"
+                                    style="margin-right:4px;"></i> Customer
                             </span>
                             <span id="customer-summary-name"
                                 style="color:var(--accent);font-weight:600;"></span>
                         </div>
 
-                        <!-- Discount -->
                         <div class="discount-row">
                             <input type="number" id="discount-input"
                                 placeholder="Discount" min="0"
@@ -136,7 +117,6 @@ const POSPage = {
                             <span id="summary-total">₵0.00</span>
                         </div>
 
-                        <!-- Payment Methods -->
                         <div class="payment-methods" style="margin-top:14px;">
                             <button class="pay-method-btn active"
                                 data-method="cash"
@@ -160,7 +140,6 @@ const POSPage = {
                             </button>
                         </div>
 
-                        <!-- Checkout -->
                         <button class="checkout-btn" id="checkout-btn"
                             onclick="POSPage.checkout()" disabled>
                             <i class="fas fa-check-circle"></i>
@@ -171,51 +150,44 @@ const POSPage = {
             </div>
         `;
 
-        // Load store settings for receipts
-        // Ensure OfflineDB is ready
-        if (typeof OfflineDB !== 'undefined' && !OfflineDB.ready) {
-            await OfflineDB.init();
-        }
-
-        // Load store settings for receipts
         await this.loadStoreSettings();
-
-        // Setup offline banner
-        this.updateOfflineBanner();
-        window.addEventListener('online',  () => this.updateOfflineBanner());
-        window.addEventListener('offline', () => this.updateOfflineBanner());
-
         await this.fetchData();
         this.setupSearch();
     },
 
-    updateOfflineBanner() {
-        const banner = document.getElementById('pos-offline-banner');
-        if (banner) {
-            banner.style.display = navigator.onLine ? 'none' : 'flex';
-        }
-    },
-
     async loadStoreSettings() {
         try {
-            if (navigator.onLine) {
-                const res = await API.get('/settings');
-                if (res?.success) {
-                    this.storeSettings = res.data;
-                    if (OfflineDB.db) await OfflineDB.saveSettings(res.data);
-                }
-            } else {
-                if (OfflineDB.db) {
-                    this.storeSettings = await OfflineDB.getSettings();
-                }
+            if (OfflineDB.ready) {
+                const cached = await OfflineDB.getSettings();
+                if (cached) this.storeSettings = cached;
+            }
+            const res = await API.get('/settings');
+            if (res?.success) {
+                this.storeSettings = res.data;
+                if (OfflineDB.ready) await OfflineDB.saveSettings(res.data);
             }
         } catch (e) {
-            console.warn('[POS] Failed to load store settings:', e);
+            console.warn('[POS] Settings load failed:', e);
         }
     },
 
     async fetchData() {
-        if (navigator.onLine) {
+        // Try cache first for instant loading
+        if (OfflineDB.ready) {
+            const cachedCats  = await OfflineDB.getCachedCategories();
+            const cachedProds = await OfflineDB.getCachedProducts();
+            if (cachedCats.length)  {
+                this.categories = cachedCats;
+                this.renderCategories();
+            }
+            if (cachedProds.length) {
+                this.products = cachedProds;
+                this.renderProducts();
+            }
+        }
+
+        // Always fetch fresh from API
+        try {
             const [catRes, prodRes] = await Promise.all([
                 API.get('/categories'),
                 API.get('/products')
@@ -223,20 +195,19 @@ const POSPage = {
 
             if (catRes?.success) {
                 this.categories = catRes.data;
-                await OfflineDB.cacheCategories(catRes.data);
+                if (OfflineDB.ready)
+                    await OfflineDB.cacheCategories(catRes.data);
+                this.renderCategories();
             }
             if (prodRes?.success) {
                 this.products = prodRes.data;
-                await OfflineDB.cacheProducts(prodRes.data);
+                if (OfflineDB.ready)
+                    await OfflineDB.cacheProducts(prodRes.data);
+                this.renderProducts();
             }
-        } else {
-            this.categories = await OfflineDB.getCachedCategories();
-            this.products   = await OfflineDB.getCachedProducts();
-            Toast.show('Loaded from offline cache', 'info', 2000);
+        } catch (e) {
+            console.warn('[POS] Fetch failed, using cache');
         }
-
-        this.renderCategories();
-        this.renderProducts();
     },
 
     renderCategories() {
@@ -250,8 +221,7 @@ const POSPage = {
             </button>
             ${this.categories.map(c => `
                 <button class="cat-tab" data-cat="${c.id}"
-                    onclick="POSPage.filterCategory('${c.id}')"
-                    style="--cat-color:${c.color};">
+                    onclick="POSPage.filterCategory('${c.id}')">
                     <i class="fas fa-${c.icon}"></i> ${c.name}
                 </button>
             `).join('')}
@@ -292,7 +262,8 @@ const POSPage = {
         const remaining = list.length - CHUNK;
 
         el.innerHTML = visible.map(p => {
-            const outOfStock = p.track_stock && parseFloat(p.stock_qty) <= 0;
+            const outOfStock = p.track_stock &&
+                parseFloat(p.stock_qty) <= 0;
             return `
                 <div class="product-card ${outOfStock ? 'out-of-stock' : ''}"
                     onclick="${outOfStock ? '' : `POSPage.addToCart(${p.id})`}"
@@ -356,7 +327,8 @@ const POSPage = {
         if (loadMoreDiv) loadMoreDiv.remove();
 
         el.innerHTML += nextChunk.map(p => {
-            const outOfStock = p.track_stock && parseFloat(p.stock_qty) <= 0;
+            const outOfStock = p.track_stock &&
+                parseFloat(p.stock_qty) <= 0;
             return `
                 <div class="product-card ${outOfStock ? 'out-of-stock' : ''}"
                     onclick="${outOfStock ? '' : `POSPage.addToCart(${p.id})`}">
@@ -395,9 +367,12 @@ const POSPage = {
 
     filterCategory(catId) {
         this.selectedCategory = catId;
-        document.querySelectorAll('.cat-tab').forEach(t => t.classList.remove('active'));
-        document.querySelector(`.cat-tab[data-cat="${catId}"]`)?.classList.add('active');
-        this.renderProducts(document.getElementById('pos-search')?.value || '');
+        document.querySelectorAll('.cat-tab')
+            .forEach(t => t.classList.remove('active'));
+        document.querySelector(
+            `.cat-tab[data-cat="${catId}"]`)?.classList.add('active');
+        this.renderProducts(
+            document.getElementById('pos-search')?.value || '');
     },
 
     setupSearch() {
@@ -447,7 +422,6 @@ const POSPage = {
                 track_stock: product.track_stock,
             });
         }
-
         this.renderCart();
     },
 
@@ -514,7 +488,9 @@ const POSPage = {
                         <i class="fas fa-plus"></i>
                     </button>
                 </div>
-                <div class="cart-item-total">${formatCurrency(item.total)}</div>
+                <div class="cart-item-total">
+                    ${formatCurrency(item.total)}
+                </div>
                 <button class="cart-item-remove"
                     onclick="POSPage.removeFromCart(${item.product_id})">
                     <i class="fas fa-times"></i>
@@ -541,7 +517,8 @@ const POSPage = {
     getTax() {
         const taxRate = parseFloat(this.storeSettings?.tax_rate || 0);
         if (!taxRate) return 0;
-        return (this.getSubtotal() - this.getDiscountAmount()) * (taxRate / 100);
+        return (this.getSubtotal() - this.getDiscountAmount()) *
+            (taxRate / 100);
     },
 
     getTotal() {
@@ -570,7 +547,8 @@ const POSPage = {
         set('checkout-label',   `Charge ${formatCurrency(total)}`);
 
         const discountRow = document.getElementById('discount-summary-row');
-        if (discountRow) discountRow.style.display = discount > 0 ? 'flex' : 'none';
+        if (discountRow) discountRow.style.display =
+            discount > 0 ? 'flex' : 'none';
 
         const checkoutBtn = document.getElementById('checkout-btn');
         if (checkoutBtn) checkoutBtn.disabled = !hasItems;
@@ -609,10 +587,11 @@ const POSPage = {
 
     setPayment(method) {
         this.paymentMethod = method;
-        document.querySelectorAll('.pay-method-btn').forEach(b =>
-            b.classList.remove('active'));
+        document.querySelectorAll('.pay-method-btn')
+            .forEach(b => b.classList.remove('active'));
         document.querySelector(
-            `.pay-method-btn[data-method="${method}"]`)?.classList.add('active');
+            `.pay-method-btn[data-method="${method}"]`)
+            ?.classList.add('active');
     },
 
     openCustomerPicker() {
@@ -641,7 +620,8 @@ const POSPage = {
                     <div class="modal-footer">
                         <button class="btn btn-ghost"
                             onclick="POSPage.setCustomer(null)">
-                            <i class="fas fa-user-slash"></i> Guest / No Customer
+                            <i class="fas fa-user-slash"></i>
+                            Guest / No Customer
                         </button>
                     </div>
                 </div>
@@ -651,26 +631,12 @@ const POSPage = {
     },
 
     async searchCustomers(query) {
-        let customers = [];
-
-        if (navigator.onLine) {
-            const res = await API.get(
-                `/customers?search=${encodeURIComponent(query)}`
-            );
-            if (res?.success) customers = res.data;
-        } else {
-            const cached = await OfflineDB.getCachedCustomers();
-            customers = query
-                ? cached.filter(c =>
-                    c.name.toLowerCase().includes(query.toLowerCase()) ||
-                    (c.phone && c.phone.includes(query)))
-                : cached;
-        }
-
-        const el = document.getElementById('customer-picker-list');
+        const res = await API.get(
+            `/customers?search=${encodeURIComponent(query)}`);
+        const el  = document.getElementById('customer-picker-list');
         if (!el) return;
 
-        if (!customers.length) {
+        if (!res?.success || !res.data.length) {
             el.innerHTML = `
                 <div class="empty-state" style="padding:20px;">
                     <i class="fas fa-users"></i>
@@ -682,7 +648,7 @@ const POSPage = {
         el.innerHTML = `
             <div style="display:flex;flex-direction:column;gap:4px;
                 max-height:280px;overflow-y:auto;">
-                ${customers.map(c => `
+                ${res.data.map(c => `
                     <div onclick="POSPage.setCustomer(${
                         JSON.stringify(c).replace(/"/g, '&quot;')})"
                         style="display:flex;align-items:center;gap:12px;
@@ -725,9 +691,11 @@ const POSPage = {
         const summaryRow  = document.getElementById('customer-summary-row');
         const summaryName = document.getElementById('customer-summary-name');
 
-        if (label)       label.textContent       = this.selectedCustomer?.name || 'Guest';
-        if (summaryRow)  summaryRow.style.display = this.selectedCustomer ? 'flex' : 'none';
-        if (summaryName) summaryName.textContent  = this.selectedCustomer?.name || '';
+        if (label) label.textContent = this.selectedCustomer?.name || 'Guest';
+        if (summaryRow) summaryRow.style.display =
+            this.selectedCustomer ? 'flex' : 'none';
+        if (summaryName) summaryName.textContent =
+            this.selectedCustomer?.name || '';
     },
 
     async checkout() {
@@ -760,13 +728,16 @@ const POSPage = {
                             <div style="font-size:13px;color:var(--text-muted);
                                 margin-bottom:4px;">Amount Due</div>
                             <div style="font-size:42px;font-weight:800;
-                                color:var(--accent);">${formatCurrency(total)}</div>
+                                color:var(--accent);">
+                                ${formatCurrency(total)}
+                            </div>
                         </div>
                         <div class="form-group">
                             <label>Amount Tendered (₵)</label>
                             <input type="number" id="cash-tendered"
                                 placeholder="0.00" min="${total}" step="0.01"
-                                style="font-size:20px;text-align:center;padding:14px;"
+                                style="font-size:20px;text-align:center;
+                                padding:14px;"
                                 oninput="POSPage.updateChange(${total})">
                         </div>
                         <div style="display:flex;justify-content:space-between;
@@ -779,7 +750,8 @@ const POSPage = {
                                 color:var(--success);"
                                 id="change-display">₵0.00</span>
                         </div>
-                        <div style="display:grid;grid-template-columns:repeat(4,1fr);
+                        <div style="display:grid;
+                            grid-template-columns:repeat(4,1fr);
                             gap:8px;margin-top:16px;">
                             ${[
                                 total,
@@ -790,16 +762,16 @@ const POSPage = {
                             .filter((v, i, a) => a.indexOf(v) === i)
                             .map(amt => `
                                 <button class="btn btn-ghost btn-sm"
-                                    onclick="POSPage.setTendered(${amt}, ${total})">
+                                    onclick="POSPage.setTendered(
+                                        ${amt}, ${total})">
                                     ${formatCurrency(amt)}
                                 </button>`
                             ).join('')}
                         </div>
                     </div>
                     <div class="modal-footer">
-                        <button class="btn btn-ghost" onclick="Modal.close()">
-                            Cancel
-                        </button>
+                        <button class="btn btn-ghost"
+                            onclick="Modal.close()">Cancel</button>
                         <button class="btn btn-success btn-lg"
                             id="complete-cash-btn"
                             onclick="POSPage.completeCashPayment(
@@ -863,55 +835,14 @@ const POSPage = {
             payment_method:  this.paymentMethod,
         };
 
-        if (navigator.onLine) {
-            const res = await API.post('/orders', orderData);
-            if (res?.success) {
-                this.showReceipt(res.data, tendered, change);
-                await this.resetAfterSale();
-            } else {
-                Toast.show(res?.message || 'Failed to process order', 'error');
-                if (btn) btn.disabled = false;
-            }
+        const res = await API.post('/orders', orderData);
+
+        if (res?.success) {
+            this.showReceipt(res.data, tendered, change);
+            await this.resetAfterSale();
         } else {
-            try {
-                const offlineOrder = await OfflineDB.queueOrder(orderData);
-
-                for (const item of this.cart) {
-                    await OfflineDB.deductStock(item.product_id, item.quantity);
-                }
-
-                await SyncManager.updatePendingBadge();
-
-                const s = this.storeSettings || {};
-                const fakeOrder = {
-                    ...orderData,
-                    id:            'offline_' + Date.now(),
-                    order_number:  offlineOrder.order_number,
-                    cashier_name:  Auth.user.name,
-                    customer_name: this.selectedCustomer?.name || null,
-                    items:         orderData.items,
-                    created_at:    new Date().toISOString(),
-                    store_name:    s.store_name,
-                    store_address: s.address,
-                    store_phone:   s.phone,
-                    store_email:   s.email,
-                    receipt_footer:s.receipt_footer,
-                    is_offline:    true,
-                };
-
-                this.showReceipt(fakeOrder, tendered, change);
-                Toast.show(
-                    'Sale saved offline. Will sync when connected.',
-                    'warning', 5000
-                );
-                await this.resetAfterSale();
-            } catch (err) {
-                Toast.show(
-                    'Failed to save offline order: ' + err.message,
-                    'error'
-                );
-                if (btn) btn.disabled = false;
-            }
+            Toast.show(res?.message || 'Failed to process order', 'error');
+            if (btn) btn.disabled = false;
         }
     },
 
@@ -924,18 +855,14 @@ const POSPage = {
         this.updateCustomerUI();
         this.clearDiscount();
 
-        if (navigator.onLine) {
-            const prodRes = await API.get('/products');
-            if (prodRes?.success) {
-                this.products = prodRes.data;
+        const prodRes = await API.get('/products');
+        if (prodRes?.success) {
+            this.products = prodRes.data;
+            if (OfflineDB.ready)
                 await OfflineDB.cacheProducts(prodRes.data);
-            }
-        } else {
-            this.products = await OfflineDB.getCachedProducts();
         }
         this.renderProducts(
-            document.getElementById('pos-search')?.value || ''
-        );
+            document.getElementById('pos-search')?.value || '');
     },
 
     showReceipt(order, tendered, change) {
@@ -947,9 +874,6 @@ const POSPage = {
                             <i class="fas fa-check-circle"
                                 style="color:var(--success);"></i>
                             Sale Complete!
-                            ${order.is_offline
-                                ? '<span class="badge badge-warning" style="margin-left:8px;">OFFLINE</span>'
-                                : ''}
                         </h3>
                         <button class="btn-icon" onclick="Modal.close()">
                             <i class="fas fa-times"></i>
@@ -980,20 +904,14 @@ const POSPage = {
             <div class="thermal-receipt">
                 <div class="receipt-header">
                     <div class="receipt-store-name">
-                        ${s.store_name || order.store_name || 'BEST COBB'}
+                        ${s.store_name || 'BEST COBB'}
                     </div>
-                    ${(s.address || order.store_address) ? `
-                        <div class="receipt-store-info">
-                            ${s.address || order.store_address}
-                        </div>` : ''}
-                    ${(s.phone || order.store_phone) ? `
-                        <div class="receipt-store-info">
-                            ${s.phone || order.store_phone}
-                        </div>` : ''}
-                    ${(s.email || order.store_email) ? `
-                        <div class="receipt-store-info">
-                            ${s.email || order.store_email}
-                        </div>` : ''}
+                    ${s.address ? `
+                        <div class="receipt-store-info">${s.address}</div>` : ''}
+                    ${s.phone ? `
+                        <div class="receipt-store-info">${s.phone}</div>` : ''}
+                    ${s.email ? `
+                        <div class="receipt-store-info">${s.email}</div>` : ''}
                     <div class="receipt-divider">================================</div>
                 </div>
                 <div class="receipt-meta">
@@ -1019,11 +937,6 @@ const POSPage = {
                     <div class="receipt-row">
                         <span>Customer</span>
                         <span>${order.customer_name}</span>
-                    </div>` : ''}
-                    ${order.is_offline ? `
-                    <div class="receipt-row">
-                        <span>Mode</span>
-                        <span>OFFLINE</span>
                     </div>` : ''}
                     <div class="receipt-divider">================================</div>
                 </div>
@@ -1081,11 +994,11 @@ const POSPage = {
                 <div class="receipt-footer">
                     <div class="receipt-divider">================================</div>
                     <div class="receipt-footer-text">
-                        ${s.receipt_footer
-                            || order.receipt_footer
-                            || 'Thank you for your purchase!'}
+                        ${s.receipt_footer || 'Thank you for your purchase!'}
                     </div>
-                    <div class="receipt-footer-text">Please keep this receipt</div>
+                    <div class="receipt-footer-text">
+                        Please keep this receipt
+                    </div>
                 </div>
             </div>
         `;

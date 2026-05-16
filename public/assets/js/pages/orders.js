@@ -79,7 +79,7 @@ const OrdersHistoryPage = {
         this.limit = 20;
 
         // Show offline pending orders banner
-        if (typeof OfflineDB !== 'undefined') {
+        /* if (typeof OfflineDB !== 'undefined') {
             const pending = await OfflineDB.getPendingOrders();
             if (pending.length > 0) {
                 const banner = document.createElement('div');
@@ -114,7 +114,7 @@ const OrdersHistoryPage = {
                     document.getElementById('page-content').firstChild
                 );
             }
-        }
+        } */
 
         await this.fetchAndRender();
 
