@@ -54,8 +54,11 @@ const Auth = {
         document.getElementById('login-screen').classList.add('hidden');
         document.getElementById('main-app').classList.remove('hidden');
         this.populateUserUI();
-        Clock.start();
         Network.watch();
+        
+        await new Promise(resolve => setTimeout(resolve, 50));
+        Clock.start();
+        
 
         // Init cache manager
         if (typeof SyncManager !== 'undefined') {

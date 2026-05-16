@@ -1,7 +1,6 @@
 <?php
 class SyncHelper {
 
-    // Tables that support sync
     private static array $syncTables = [
         'orders'          => 'orders',
         'products'        => 'products',
@@ -12,15 +11,12 @@ class SyncHelper {
         'order_items'     => 'order_items',
     ];
 
-    // ── Upsert a record ──────────────────────
     public static function upsert(string $entityType, array $record): bool {
         $conn = getDBConnection();
 
         if (!isset(self::$syncTables[$entityType])) {
             throw new Exception("Unknown entity type: {$entityType}");
         }
-
-        $table = self::$syncTables[$entityType];
 
         switch ($entityType) {
             case 'orders':
@@ -42,7 +38,6 @@ class SyncHelper {
         }
     }
 
-    // ── Orders ───────────────────────────────
     private static function upsertOrder(mysqli $conn, array $r): bool {
         $stmt = $conn->prepare('
             INSERT INTO orders (
@@ -52,21 +47,37 @@ class SyncHelper {
                 payment_method, notes, is_synced, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
             ON DUPLICATE KEY UPDATE
-                status          = VALUES(status),
-                is_synced       = 1,
-                synced_at       = NOW()
+                status    = VALUES(status),
+                is_synced = 1,
+                synced_at = NOW()
         ');
 
+        $uuid           = $r['uuid'];
+        $orderNumber    = $r['order_number'];
+        $customerId     = $r['customer_id'] ? (int)$r['customer_id'] : null;
+        $cashierId      = (int)$r['cashier_id'];
+        $status         = $r['status'];
+        $subtotal       = (float)$r['subtotal'];
+        $discountAmount = (float)$r['discount_amount'];
+        $discountType   = $r['discount_type'];
+        $taxAmount      = (float)$r['tax_amount'];
+        $totalAmount    = (float)$r['total_amount'];
+        $amtTendered    = (float)$r['amount_tendered'];
+        $changeDue      = (float)$r['change_due'];
+        $paymentMethod  = $r['payment_method'];
+        $notes          = $r['notes'];
+        $createdAt      = $r['created_at'];
+
         $stmt->bind_param(
-            'ssiisddsddddssss',
-            $r['uuid'], $r['order_number'],
-            $r['customer_id'], $r['cashier_id'],
-            $r['status'], $r['subtotal'],
-            $r['discount_amount'], $r['discount_type'],
-            $r['tax_amount'], $r['total_amount'],
-            $r['amount_tendered'], $r['change_due'],
-            $r['payment_method'], $r['notes'],
-            $r['created_at']
+            'ssiisddsddddsss',
+            $uuid, $orderNumber,
+            $customerId, $cashierId,
+            $status,
+            $subtotal, $discountAmount, $discountType,
+            $taxAmount, $totalAmount,
+            $amtTendered, $changeDue,
+            $paymentMethod, $notes,
+            $createdAt
         );
 
         $stmt->execute();
@@ -75,9 +86,7 @@ class SyncHelper {
         return $affected >= 0;
     }
 
-    // ── Order Items ──────────────────────────
     private static function upsertOrderItem(mysqli $conn, array $r): bool {
-        // Find order_id from uuid
         $ostmt = $conn->prepare('SELECT id FROM orders WHERE uuid = ? LIMIT 1');
         $ostmt->bind_param('s', $r['order_uuid']);
         $ostmt->execute();
@@ -93,8 +102,8 @@ class SyncHelper {
                 unit_price, quantity, total
             ) VALUES (?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
-                quantity   = VALUES(quantity),
-                total      = VALUES(total)
+                quantity = VALUES(quantity),
+                total    = VALUES(total)
         ');
 
         $stmt->bind_param(
@@ -108,7 +117,6 @@ class SyncHelper {
         return $affected >= 0;
     }
 
-    // ── Products ─────────────────────────────
     private static function upsertProduct(mysqli $conn, array $r): bool {
         $stmt = $conn->prepare('
             INSERT INTO products (
@@ -132,14 +140,29 @@ class SyncHelper {
                                     VALUES(updated_at), updated_at)
         ');
 
+        $uuid          = $r['uuid'];
+        $categoryId    = $r['category_id'] ? (int)$r['category_id'] : null;
+        $name          = $r['name'];
+        $sku           = $r['sku'];
+        $barcode       = $r['barcode'];
+        $description   = $r['description'];
+        $price         = (float)$r['price'];
+        $costPrice     = (float)$r['cost_price'];
+        $stockQty      = (float)$r['stock_qty'];
+        $lowStockAlert = (int)$r['low_stock_alert'];
+        $unit          = $r['unit'];
+        $isActive      = (int)$r['is_active'];
+        $trackStock    = (int)$r['track_stock'];
+        $updatedAt     = $r['updated_at'];
+
         $stmt->bind_param(
             'sissssdddissis',
-            $r['uuid'], $r['category_id'], $r['name'],
-            $r['sku'], $r['barcode'], $r['description'],
-            $r['price'], $r['cost_price'], $r['stock_qty'],
-            $r['low_stock_alert'], $r['unit'],
-            $r['is_active'], $r['track_stock'],
-            $r['updated_at']
+            $uuid, $categoryId, $name,
+            $sku, $barcode, $description,
+            $price, $costPrice, $stockQty,
+            $lowStockAlert, $unit,
+            $isActive, $trackStock,
+            $updatedAt
         );
 
         $stmt->execute();
@@ -148,7 +171,6 @@ class SyncHelper {
         return $affected >= 0;
     }
 
-    // ── Categories ───────────────────────────
     private static function upsertCategory(mysqli $conn, array $r): bool {
         $stmt = $conn->prepare('
             INSERT INTO categories (uuid, name, color, icon, is_active, is_synced)
@@ -162,10 +184,15 @@ class SyncHelper {
                 synced_at = NOW()
         ');
 
+        $uuid     = $r['uuid'];
+        $name     = $r['name'];
+        $color    = $r['color'];
+        $icon     = $r['icon'];
+        $isActive = (int)$r['is_active'];
+
         $stmt->bind_param(
             'ssssi',
-            $r['uuid'], $r['name'], $r['color'],
-            $r['icon'], $r['is_active']
+            $uuid, $name, $color, $icon, $isActive
         );
 
         $stmt->execute();
@@ -174,7 +201,6 @@ class SyncHelper {
         return $affected >= 0;
     }
 
-    // ── Customers ────────────────────────────
     private static function upsertCustomer(mysqli $conn, array $r): bool {
         $stmt = $conn->prepare('
             INSERT INTO customers (
@@ -182,21 +208,29 @@ class SyncHelper {
                 loyalty_points, total_spent, is_synced
             ) VALUES (?, ?, ?, ?, ?, ?, ?, 1)
             ON DUPLICATE KEY UPDATE
-                name          = VALUES(name),
-                phone         = VALUES(phone),
-                email         = VALUES(email),
-                address       = VALUES(address),
-                loyalty_points= VALUES(loyalty_points),
-                total_spent   = VALUES(total_spent),
-                is_synced     = 1,
-                synced_at     = NOW()
+                name           = VALUES(name),
+                phone          = VALUES(phone),
+                email          = VALUES(email),
+                address        = VALUES(address),
+                loyalty_points = VALUES(loyalty_points),
+                total_spent    = VALUES(total_spent),
+                is_synced      = 1,
+                synced_at      = NOW()
         ');
+
+        $uuid          = $r['uuid'];
+        $name          = $r['name'];
+        $phone         = $r['phone'];
+        $email         = $r['email'];
+        $address       = $r['address'];
+        $loyaltyPoints = (int)$r['loyalty_points'];
+        $totalSpent    = (float)$r['total_spent'];
 
         $stmt->bind_param(
             'sssssid',
-            $r['uuid'], $r['name'], $r['phone'],
-            $r['email'], $r['address'],
-            $r['loyalty_points'], $r['total_spent']
+            $uuid, $name, $phone,
+            $email, $address,
+            $loyaltyPoints, $totalSpent
         );
 
         $stmt->execute();
@@ -205,7 +239,6 @@ class SyncHelper {
         return $affected >= 0;
     }
 
-    // ── Expenses ─────────────────────────────
     private static function upsertExpense(mysqli $conn, array $r): bool {
         $stmt = $conn->prepare('
             INSERT INTO expenses (
@@ -213,18 +246,25 @@ class SyncHelper {
                 notes, expense_date, is_synced
             ) VALUES (?, ?, ?, ?, ?, ?, 1)
             ON DUPLICATE KEY UPDATE
-                category     = VALUES(category),
-                description  = VALUES(description),
-                amount       = VALUES(amount),
-                notes        = VALUES(notes),
-                is_synced    = 1,
-                synced_at    = NOW()
+                category    = VALUES(category),
+                description = VALUES(description),
+                amount      = VALUES(amount),
+                notes       = VALUES(notes),
+                is_synced   = 1,
+                synced_at   = NOW()
         ');
+
+        $uuid        = $r['uuid'];
+        $category    = $r['category'];
+        $description = $r['description'];
+        $amount      = (float)$r['amount'];
+        $notes       = $r['notes'];
+        $expenseDate = $r['expense_date'];
 
         $stmt->bind_param(
             'sssdss',
-            $r['uuid'], $r['category'], $r['description'],
-            $r['amount'], $r['notes'], $r['expense_date']
+            $uuid, $category, $description,
+            $amount, $notes, $expenseDate
         );
 
         $stmt->execute();
@@ -233,7 +273,6 @@ class SyncHelper {
         return $affected >= 0;
     }
 
-    // ── Stock Movements ──────────────────────
     private static function upsertStockMovement(mysqli $conn, array $r): bool {
         $stmt = $conn->prepare('
             INSERT INTO stock_movements (
@@ -246,11 +285,21 @@ class SyncHelper {
                 synced_at = NOW()
         ');
 
+        $productId = (int)$r['product_id'];
+        $userId    = (int)$r['user_id'];
+        $type      = $r['type'];
+        $qtyBefore = (float)$r['qty_before'];
+        $qtyChange = (float)$r['qty_change'];
+        $qtyAfter  = (float)$r['qty_after'];
+        $reference = $r['reference'];
+        $notes     = $r['notes'];
+        $createdAt = $r['created_at'];
+
         $stmt->bind_param(
             'iisdddsss',
-            $r['product_id'], $r['user_id'], $r['type'],
-            $r['qty_before'], $r['qty_change'], $r['qty_after'],
-            $r['reference'], $r['notes'], $r['created_at']
+            $productId, $userId, $type,
+            $qtyBefore, $qtyChange, $qtyAfter,
+            $reference, $notes, $createdAt
         );
 
         $stmt->execute();
@@ -259,7 +308,6 @@ class SyncHelper {
         return $affected >= 0;
     }
 
-    // ── Get Updated Since ────────────────────
     public static function getUpdatedSince(
         string $entityType,
         ?string $since,
@@ -326,7 +374,6 @@ class SyncHelper {
         $sql  = $queries[$entityType];
         $stmt = $conn->prepare($sql);
 
-        // Some queries need two params (orders)
         if ($entityType === 'orders') {
             $stmt->bind_param('ss', $since, $since);
         } else {
@@ -337,21 +384,10 @@ class SyncHelper {
         $results = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
         $stmt->close();
 
-        // Parse items_json for orders
         if ($entityType === 'orders') {
             foreach ($results as &$order) {
-                if ($order['items_json']) {
-                    $order['items'] = array_map(
-                        fn($i) => json_decode($i, true),
-                        explode('},{', str_replace(
-                            ['[', ']'], '',
-                            '[' . $order['items_json'] . ']'
-                        ))
-                    );
-                    // Clean parse
-                    $decoded = json_decode(
-                        '[' . $order['items_json'] . ']', true
-                    );
+                if (!empty($order['items_json'])) {
+                    $decoded        = json_decode('[' . $order['items_json'] . ']', true);
                     $order['items'] = $decoded ?? [];
                 } else {
                     $order['items'] = [];
@@ -363,7 +399,6 @@ class SyncHelper {
         return $results;
     }
 
-    // ── Mark records as synced ───────────────
     public static function markSynced(string $entityType, array $uuids): int {
         $conn  = getDBConnection();
         $table = self::$syncTables[$entityType] ?? null;
