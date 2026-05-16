@@ -52,6 +52,36 @@ const API = {
         }
     },
 
+
+    async checkDBMode() {
+        const res = await this.get('/system/status');
+        if (res?.success) {
+            const mode = res.data.db_mode;
+            console.log('[API] DB Mode:', mode);
+
+            // Update sync status indicator
+            const sync = document.getElementById('sync-status');
+            if (sync) {
+                if (mode === 'live') {
+                    sync.className = 'sync-status';
+                    sync.innerHTML = `<i class="fas fa-check-circle"></i>
+                        <span>Live DB</span>`;
+                } else if (mode === 'online') {
+                    sync.className = 'sync-status';
+                    sync.innerHTML = `<i class="fas fa-check-circle"></i>
+                        <span>Synced</span>`;
+                } else {
+                    sync.className = 'sync-status offline';
+                    sync.innerHTML = `<i class="fas fa-exclamation-circle"></i>
+                        <span>Local DB</span>`;
+                }
+            }
+
+            return mode;
+        }
+        return 'unknown';
+    },
+
     get(endpoint)         { return this.request('GET', endpoint); },
     post(endpoint, data)  { return this.request('POST', endpoint, data); },
     put(endpoint, data)   { return this.request('PUT', endpoint, data); },

@@ -166,14 +166,13 @@ session_start();
                     <div class="page-title" id="page-title">Point of Sale</div>
                 </div>
                 <div class="topbar-right">
-                    <div class="sync-status" id="sync-status">
+                    <div class="sync-status" id="sync-status"
+                        onclick="SyncEngine.manualSync()"
+                        title="Click to sync now"
+                        style="cursor:pointer;">
                         <i class="fas fa-check-circle"></i>
                         <span>Synced</span>
                     </div>
-                    <button class="btn-icon" onclick="toggleTheme()" title="Toggle theme">
-                        <i class="fas fa-moon" id="theme-icon"></i>
-                    </button>
-                    <div class="topbar-time" id="topbar-time"></div>
                 </div>
             </header>
 
@@ -206,6 +205,8 @@ session_start();
 <script src="/public/assets/js/pages/expenses.js"></script>
 <script src="/public/assets/js/pages/reports.js"></script>
 <script src="/public/assets/js/offline.js"></script>
+<script src="/public/assets/js/sync-engine.js"></script>
+
 <script>
     // Register Service Worker for PWA install + static caching only
     if ('serviceWorker' in navigator) {

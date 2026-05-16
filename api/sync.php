@@ -1,0 +1,109 @@
+<?php
+// ═══════════════════════════════════════════
+//  HybridPOS — Sync API
+//  Handles bidirectional sync between
+//  hybridpos.local and bestcobb.shop
+// ═══════════════════════════════════════════
+
+// POST /api/sync/push — Local pushes data to Live
+addRoute('POST', '/api/sync/push', function () {
+    $auth = AuthMiddleware::handle();
+    $body = json_decode(file_get_contents('php://input'), true);
+
+    if (empty($body['entity_type'])) {
+        Response::error('entity_type is required', 422);
+    }
+    if (empty($body['records'])) {
+        Response::success(['synced' => 0], 'No records to sync');
+    }
+
+    $entityType = $body['entity_type'];
+    $records    = $body['records'];
+    $synced     = 0;
+    $errors     = [];
+
+    foreach ($records as $record) {
+        try {
+            $result = SyncHelper::upsert($entityType, $record);
+            if ($result) $synced++;
+        } catch (Exception $e) {
+            $errors[] = [
+                'uuid'  => $record['uuid'] ?? 'unknown',
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    Response::success([
+        'synced' => $synced,
+        'errors' => $errors,
+        'total'  => count($records),
+    ], "Synced {$synced} of " . count($records) . " records");
+});
+
+// GET /api/sync/pull — Local pulls data from Live
+addRoute('GET', '/api/sync/pull', function () {
+    AuthMiddleware::handle();
+
+    $entityType = $_GET['entity_type'] ?? null;
+    $since      = $_GET['since']       ?? null; // timestamp
+    $limit      = (int)($_GET['limit'] ?? 500);
+
+    if (!$entityType) Response::error('entity_type is required', 422);
+
+    $records = SyncHelper::getUpdatedSince($entityType, $since, $limit);
+
+    Response::success([
+        'entity_type' => $entityType,
+        'records'     => $records,
+        'count'       => count($records),
+        'timestamp'   => date('Y-m-d H:i:s'),
+    ]);
+});
+
+// GET /api/sync/status
+addRoute('GET', '/api/sync/status', function () {
+    AuthMiddleware::handle();
+
+    $conn   = getDBConnection();
+    $tables = [
+        'orders'          => 'created_at',
+        'products'        => 'updated_at',
+        'categories'      => 'created_at',
+        'customers'       => 'updated_at',
+        'expenses'        => 'created_at',
+        'stock_movements' => 'created_at',
+    ];
+
+    $status = [];
+
+    foreach ($tables as $table => $dateCol) {
+        $result = $conn->query("
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN is_synced = 0 THEN 1 ELSE 0 END) AS pending,
+                MAX({$dateCol}) AS last_updated
+            FROM {$table}
+        ");
+        $status[$table] = $result->fetch_assoc();
+    }
+
+    Response::success([
+        'status'    => $status,
+        'server'    => $_SERVER['HTTP_HOST'],
+        'timestamp' => date('Y-m-d H:i:s'),
+        'db_mode'   => getDBMode(),
+    ]);
+});
+
+// POST /api/sync/acknowledge — Mark records as synced
+addRoute('POST', '/api/sync/acknowledge', function () {
+    AuthMiddleware::handle();
+    $body = json_decode(file_get_contents('php://input'), true);
+
+    if (empty($body['entity_type'])) Response::error('entity_type required', 422);
+    if (empty($body['uuids']))       Response::error('uuids required', 422);
+
+    $synced = SyncHelper::markSynced($body['entity_type'], $body['uuids']);
+    Response::success(['marked' => $synced], 'Records acknowledged');
+});

@@ -23,6 +23,12 @@ const Auth = {
             localStorage.setItem('pos_token', res.data.token);
             localStorage.setItem('pos_user', JSON.stringify(res.data.user));
             this.user = res.data.user;
+
+            // Store for sync engine
+            if (typeof SyncEngine !== 'undefined') {
+                SyncEngine.setSyncPassword(password);
+            }
+
             this.showApp();
             Toast.show('Welcome back, ' + this.user.name + '!', 'success');
         } else {
@@ -43,6 +49,7 @@ const Auth = {
         document.getElementById('main-app').classList.add('hidden');
     },
 
+
     async showApp() {
         document.getElementById('login-screen').classList.add('hidden');
         document.getElementById('main-app').classList.remove('hidden');
@@ -56,9 +63,18 @@ const Auth = {
             SyncManager.cacheAllData();
         }
 
+        // Check DB mode
+        API.checkDBMode();
+
+        // Init sync engine (only runs on hybridpos.local)
+        if (typeof SyncEngine !== 'undefined') {
+            SyncEngine.init();
+        }
+
         Router.init();
         setTimeout(() => checkResetRequests(), 2000);
     },
+
 
     populateUserUI() {
         const u = this.user;
@@ -203,8 +219,9 @@ const Modal = {
 // ── Clock ────────────────────────────────
 const Clock = {
     start() {
-        const el   = document.getElementById('topbar-time');
         const tick = () => {
+            const el = document.getElementById('topbar-time');
+            if (!el) return;
             const now  = new Date();
             el.textContent = now.toLocaleTimeString([], {
                 hour: '2-digit', minute: '2-digit'
