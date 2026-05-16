@@ -1244,3 +1244,319 @@ select:focus {
     .page-content { padding: 16px; }
     .form-row { grid-template-columns: 1fr; }
 }
+
+/* ══════════════════════════════════════════
+   SETTINGS PAGE
+══════════════════════════════════════════ */
+#settings-content .card {
+    margin-bottom: 0;
+}
+
+#settings-content .form-group {
+    margin-bottom: 16px;
+}
+
+#settings-content .form-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+#settings-content input[type="text"],
+#settings-content input[type="email"],
+#settings-content input[type="number"],
+#settings-content input[type="password"],
+#settings-content input[type="tel"],
+#settings-content input[type="color"],
+#settings-content select,
+#settings-content textarea {
+    width: 100%;
+    padding: 10px 14px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+    transition: var(--transition);
+}
+
+#settings-content input:focus,
+#settings-content select:focus,
+#settings-content textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-light);
+}
+
+#settings-content textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+#settings-content input[type="color"] {
+    height: 42px;
+    padding: 4px 8px;
+    cursor: pointer;
+}
+
+#settings-content .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+@media (max-width: 768px) {
+    #settings-content .form-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+/* Scrollable category tabs for 100+ categories */
+.category-tabs {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    flex-shrink: 0;
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+}
+
+.category-tabs::-webkit-scrollbar { height: 4px; }
+.category-tabs::-webkit-scrollbar-thumb {
+    background: var(--accent);
+    border-radius: 99px;
+}
+
+
+
+/* ══════════════════════════════════════════
+   STOCK & GENERAL PAGE FORMS
+══════════════════════════════════════════ */
+#stock-content input,
+#stock-content select,
+#stock-content textarea {
+    width: 100%;
+    padding: 10px 14px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+    transition: var(--transition);
+}
+
+#stock-content input:focus,
+#stock-content select:focus,
+#stock-content textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-light);
+}
+
+#stock-content textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+#stock-content .form-group {
+    margin-bottom: 16px;
+}
+
+#stock-content .form-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+#stock-content .card {
+    max-width: 100%;
+}
+
+/* Fix card max-width override for forms */
+#stock-content .card[style*="max-width:560px"] {
+    max-width: 560px;
+}
+
+/* ══════════════════════════════════════════
+   GLOBAL FORM STYLES (applies everywhere)
+══════════════════════════════════════════ */
+.page-content input[type="text"],
+.page-content input[type="email"],
+.page-content input[type="number"],
+.page-content input[type="password"],
+.page-content input[type="tel"],
+.page-content input[type="date"],
+.page-content select,
+.page-content textarea {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: 14px;
+    outline: none;
+    transition: var(--transition);
+}
+
+.page-content input:focus,
+.page-content select:focus,
+.page-content textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-light);
+}
+
+.page-content .form-group {
+    margin-bottom: 16px;
+}
+
+.page-content .form-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.page-content .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+@media (max-width: 768px) {
+    .page-content .form-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+/* ══════════════════════════════════════════
+   PAGE TABS (Settings, Stock, etc.)
+══════════════════════════════════════════ */
+.settings-tab {
+    padding: 10px 20px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    transition: var(--transition);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: -1px;
+    font-family: inherit;
+    background: none;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.settings-tab:hover {
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+}
+
+.settings-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    background: none;
+}
+
+.tabs-container {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.tabs-container::-webkit-scrollbar { height: 3px; }
+.tabs-container::-webkit-scrollbar-thumb {
+    background: var(--accent);
+    border-radius: 99px;
+}
+
+
+/* ══════════════════════════════════════════
+   EXPENSES FORM FIXES
+══════════════════════════════════════════ */
+#expenses-content input,
+#expenses-content select,
+#expenses-content textarea {
+    width: 100%;
+    padding: 10px 14px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+    transition: var(--transition);
+}
+
+#expenses-content input:focus,
+#expenses-content select:focus,
+#expenses-content textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-light);
+}
+
+#expenses-content textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+#expenses-content .form-group {
+    margin-bottom: 16px;
+}
+
+#expenses-content .form-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+#expenses-content .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+/* Amount input special */
+#exp-amount, #edit-exp-amount {
+    font-size: 24px !important;
+    text-align: center;
+    padding: 16px !important;
+    font-weight: 700;
+    color: var(--accent) !important;
+    letter-spacing: 1px;
+}
+
+/* Description full width */
+#exp-description, #edit-exp-description {
+    font-size: 14px;
+    padding: 12px 14px;
+}
+
+/* Date input fix */
+input[type="date"] {
+    color-scheme: dark;
+}
+
+[data-theme="light"] input[type="date"] {
+    color-scheme: light;
+}

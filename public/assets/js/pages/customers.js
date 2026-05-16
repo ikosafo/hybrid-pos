@@ -85,7 +85,7 @@ const CustomersPage = {
     },
 
     openModal(id = null) {
-        const c = id ? this.data.find(x => x.id === id) : null;
+        const c = id ? this.data.find(x => x.id == id) : null;
         Modal.show(`
             <div class="modal-overlay">
                 <div class="modal">

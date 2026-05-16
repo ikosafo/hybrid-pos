@@ -24,15 +24,28 @@ const API = {
         if (data) config.body = JSON.stringify(data);
 
         try {
-            const res = await fetch(`${this.baseURL}${endpoint}`, config);
-            const json = await res.json();
+            const res  = await fetch(`${this.baseURL}${endpoint}`, config);
+            const text = await res.text();
 
-            if (res.status === 401) {
-                Auth.logout();
-                return null;
+            // Extract JSON even if PHP warnings are prepended
+            const jsonMatch = text.match(/\{[\s\S]*\}$/);
+            if (jsonMatch) {
+                try {
+                    const json = JSON.parse(jsonMatch[0]);
+                    if (res.status === 401) {
+                        Auth.logout();
+                        return null;
+                    }
+                    return json;
+                } catch {
+                    console.error('JSON parse error:', text);
+                    return { success: false, message: 'Server error. Please try again.' };
+                }
             }
 
-            return json;
+            console.error('Non-JSON response:', text);
+            return { success: false, message: 'Server error. Please try again.' };
+
         } catch (err) {
             console.error('API Error:', err);
             return { success: false, message: 'Network error. Check your connection.' };

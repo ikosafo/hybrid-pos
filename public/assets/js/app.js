@@ -18,15 +18,44 @@ const Auth = {
     },
 
     async login(email, password) {
-        const res = await API.post('/auth/login', { email, password });
-        if (res && res.success) {
-            localStorage.setItem('pos_token', res.data.token);
-            localStorage.setItem('pos_user', JSON.stringify(res.data.user));
-            this.user = res.data.user;
-            this.showApp();
-            Toast.show('Welcome back, ' + this.user.name + '!', 'success');
+        if (navigator.onLine) {
+            // Online login
+            const res = await API.post('/auth/login', { email, password });
+            if (res && res.success) {
+                localStorage.setItem('pos_token', res.data.token);
+                localStorage.setItem('pos_user', JSON.stringify(res.data.user));
+                this.user = res.data.user;
+
+                // Cache credentials for offline use (non-blocking)
+                if (typeof OfflineAuth !== 'undefined' && OfflineDB.ready) {
+                    try {
+                        await OfflineAuth.cacheLoginCredentials(
+                            res.data.user,
+                            res.data.token,
+                            password
+                        );
+                    } catch (e) {
+                        console.warn('[Auth] Failed to cache credentials:', e);
+                    }
+                }
+
+                this.showApp();
+                Toast.show('Welcome back, ' + this.user.name + '!', 'success');
+            } else {
+                throw new Error(res?.message || 'Login failed');
+            }
         } else {
-            throw new Error(res?.message || 'Login failed');
+            // Offline login
+            try {
+                const cached = await OfflineAuth.attemptOfflineLogin(email, password);
+                localStorage.setItem('pos_token', cached.token);
+                localStorage.setItem('pos_user', JSON.stringify(cached.user));
+                this.user = cached.user;
+                this.showApp();
+                Toast.show('Logged in offline. Data will sync when connected.', 'warning', 5000);
+            } catch (err) {
+                throw new Error(err.message);
+            }
         }
     },
 
@@ -43,15 +72,20 @@ const Auth = {
         document.getElementById('main-app').classList.add('hidden');
     },
 
-    showApp() {
+    async showApp() {
         document.getElementById('login-screen').classList.add('hidden');
         document.getElementById('main-app').classList.remove('hidden');
         this.populateUserUI();
-        Router.init();
         Clock.start();
         Network.watch();
-        // Init offline support
-        if (typeof SyncManager !== 'undefined') SyncManager.init();
+
+        // Init OfflineDB first, then start routing
+        if (typeof SyncManager !== 'undefined') {
+            await SyncManager.init();
+        }
+
+        Router.init();
+        setTimeout(() => checkResetRequests(), 2000);
     },
 
     populateUserUI() {
@@ -79,7 +113,10 @@ const Router = {
         categories: { title: 'Categories',     load: () => CategoriesPage.load() },
         customers:  { title: 'Customers',      load: () => CustomersPage.load() },
         orders:     { title: 'Orders',         load: () => OrdersPage.load() },
+        stock:      { title: 'Stock Management', load: () => StockPage.load() },
         settings:   { title: 'Settings',       load: () => SettingsPage.load() },
+        expenses:   { title: 'Expense Tracking', load: () => ExpensesPage.load() },
+        reports:    { title: 'Reports & Exports', load: () => ReportsPage.load() },
     },
 
     init() {
@@ -144,7 +181,6 @@ const Modal = {
     show(html) {
         const container = document.getElementById('modals-container');
         container.innerHTML = html;
-        // Close on overlay click
         container.querySelector('.modal-overlay')?.addEventListener('click', e => {
             if (e.target === e.currentTarget) this.close();
         });
@@ -160,10 +196,14 @@ const Modal = {
                 <div class="modal">
                     <div class="modal-header">
                         <h3 class="modal-title">${title}</h3>
-                        <button class="btn-icon" onclick="Modal.close()"><i class="fas fa-times"></i></button>
+                        <button class="btn-icon" onclick="Modal.close()">
+                            <i class="fas fa-times"></i>
+                        </button>
                     </div>
                     <div class="modal-body">
-                        <p style="color:var(--text-secondary);font-size:14px;">${message}</p>
+                        <p style="color:var(--text-secondary);font-size:14px;line-height:1.6;">
+                            ${message}
+                        </p>
                     </div>
                     <div class="modal-footer">
                         <button class="btn btn-ghost" onclick="Modal.close()">Cancel</button>
@@ -185,7 +225,10 @@ const Clock = {
         const el = document.getElementById('topbar-time');
         const tick = () => {
             const now = new Date();
-            el.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            el.textContent = now.toLocaleTimeString([], {
+                hour:   '2-digit',
+                minute: '2-digit'
+            });
         };
         tick();
         setInterval(tick, 1000);
@@ -196,9 +239,9 @@ const Clock = {
 const Network = {
     watch() {
         const update = () => {
-            const online  = navigator.onLine;
-            const badge   = document.getElementById('connection-badge');
-            const sync    = document.getElementById('sync-status');
+            const online = navigator.onLine;
+            const badge  = document.getElementById('connection-badge');
+            const sync   = document.getElementById('sync-status');
 
             if (badge) {
                 badge.className = online ? 'online-badge' : 'online-badge offline';
@@ -253,10 +296,10 @@ function toggleSidebar() {
 }
 
 function toggleTheme() {
-    const html = document.documentElement;
+    const html   = document.documentElement;
     const isDark = html.getAttribute('data-theme') === 'dark';
     html.setAttribute('data-theme', isDark ? 'light' : 'dark');
-    document.getElementById('theme-icon').className = isDark ? 'fas fa-moon' : 'fas fa-sun';
+    document.getElementById('theme-icon').className = isDark ? 'fas fa-sun' : 'fas fa-moon';
     localStorage.setItem('pos_theme', isDark ? 'light' : 'dark');
 }
 
@@ -264,10 +307,10 @@ function togglePassword() {
     const input = document.getElementById('login-password');
     const icon  = document.getElementById('eye-icon');
     if (input.type === 'password') {
-        input.type = 'text';
+        input.type    = 'text';
         icon.className = 'fas fa-eye-slash';
     } else {
-        input.type = 'password';
+        input.type    = 'password';
         icon.className = 'fas fa-eye';
     }
 }
@@ -276,10 +319,113 @@ function logout() {
     Modal.confirm('Are you sure you want to log out?', () => Auth.logout(), 'Log Out');
 }
 
-// ── Stub pages (until loaded) ────────────
-const OrdersPage = { load: () => OrdersHistoryPage.load() };
+// ── Stub Pages ───────────────────────────
+const OrdersPage = {
+    load: () => OrdersHistoryPage.load()
+};
 
-const SettingsPage = { load: () => SettingsPageModule.load() };
+const SettingsPage = {
+    load: () => SettingsPageModule.load()
+};
+
+
+// ── Forgot Password ──────────────────────
+function showForgotPassword() {
+    document.getElementById('login-form').classList.add('hidden');
+    document.getElementById('login-error').classList.add('hidden');
+
+    const existing = document.getElementById('forgot-form');
+    if (existing) existing.remove();
+
+    const forgotHTML = `
+        <div id="forgot-form">
+            <div class="auth-logo" style="margin-bottom:20px;">
+                <div class="logo-icon" style="width:44px;height:44px;font-size:18px;margin:0 auto 12px;">
+                    <i class="fas fa-envelope"></i>
+                </div>
+                <h1 style="font-size:22px;">Forgot Password</h1>
+                <p>Enter your email to receive a reset link</p>
+            </div>
+            <div class="form-group">
+                <label>Email Address</label>
+                <div class="input-icon">
+                    <i class="fas fa-envelope"></i>
+                    <input type="email" id="forgot-email" placeholder="your@email.com">
+                </div>
+            </div>
+            <div id="forgot-message" class="alert hidden"></div>
+            <button class="btn btn-primary btn-full" onclick="sendResetLink()">
+                <i class="fas fa-paper-plane"></i> Send Reset Link
+            </button>
+            <div style="text-align:center;margin-top:16px;">
+                <a href="#" onclick="showLoginForm()"
+                    style="color:var(--accent);font-size:13px;">
+                    <i class="fas fa-arrow-left"></i> Back to Login
+                </a>
+            </div>
+        </div>
+    `;
+
+    const card = document.querySelector('.auth-card');
+    card.insertAdjacentHTML('beforeend', forgotHTML);
+    setTimeout(() => document.getElementById('forgot-email')?.focus(), 100);
+}
+
+function showLoginForm() {
+    document.getElementById('login-form').classList.remove('hidden');
+    const forgot = document.getElementById('forgot-form');
+    if (forgot) forgot.remove();
+}
+
+async function sendResetLink() {
+    const email  = document.getElementById('forgot-email')?.value.trim();
+    const msgBox = document.getElementById('forgot-message');
+    if (!msgBox) return;
+
+    msgBox.className   = 'alert hidden';
+    msgBox.textContent = '';
+
+    if (!email) {
+        msgBox.textContent = 'Please enter your email address.';
+        msgBox.className   = 'alert alert-error';
+        return;
+    }
+
+    const res = await fetch('/public/api/auth/forgot-password', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ email })
+    });
+
+    const data = await res.json();
+    msgBox.textContent = data.message;
+    msgBox.className   = `alert ${data.success ? 'alert-success' : 'alert-error'}`;
+}
+
+
+async function checkResetRequests() {
+    if (!Auth.hasRole('superadmin', 'admin')) return;
+    const res = await API.get('/auth/reset-requests');
+    if (res?.success && res.data.length > 0) {
+        // Show badge on settings nav item
+        const settingsLink = document.querySelector('.nav-item[data-page="settings"]');
+        if (settingsLink) {
+            const existing = settingsLink.querySelector('.nav-badge');
+            if (!existing) {
+                settingsLink.insertAdjacentHTML('beforeend',
+                    `<span class="nav-badge">${res.data.length}</span>`
+                );
+            } else {
+                existing.textContent = res.data.length;
+            }
+        }
+        Toast.show(
+            `${res.data.length} password reset request(s) pending`,
+            'warning',
+            5000
+        );
+    }
+}
 
 // ── Boot ─────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {

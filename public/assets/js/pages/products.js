@@ -58,13 +58,15 @@ const ProductsPage = {
     },
 
     async fetchAndRender() {
-        let url = '/products?';
-        if (this.search)         url += `search=${encodeURIComponent(this.search)}&`;
-        if (this.categoryFilter) url += `category_id=${this.categoryFilter}`;
-        const res = await API.get(url);
-        if (!res?.success) { Toast.show('Failed to load products', 'error'); return; }
-        this.data = res.data;
-        this.render();
+        const params = new URLSearchParams();
+        if (this.search)         params.append('search', this.search);
+        if (this.categoryFilter) params.append('category_id', this.categoryFilter);
+        const query = params.toString();
+        const url   = '/products' + (query ? '?' + query : '');
+        const res   = await API.get(url);
+            if (!res?.success) { Toast.show('Failed to load products', 'error'); return; }
+            this.data = res.data;
+            this.render();
     },
 
     render() {

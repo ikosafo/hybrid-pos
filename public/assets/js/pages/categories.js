@@ -71,7 +71,7 @@ const CategoriesPage = {
     },
 
     openModal(id = null) {
-        const cat = id ? this.data.find(c => c.id === id) : null;
+        const cat = id ? this.data.find(c => c.id == id) : null;
         Modal.show(`
             <div class="modal-overlay">
                 <div class="modal">

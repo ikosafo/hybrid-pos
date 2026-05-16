@@ -61,6 +61,9 @@ if (str_starts_with($uri, '/api/')) {
     require_once __DIR__ . '/../api/orders.php';
     require_once __DIR__ . '/../api/settings.php';
     require_once __DIR__ . '/../api/users.php';
+    require_once __DIR__ . '/../api/stock.php';
+    require_once __DIR__ . '/../api/expenses.php';
+    require_once __DIR__ . '/../api/reports.php';
 
     $match = matchRoute($requestMethod, $uri);
     if ($match) {

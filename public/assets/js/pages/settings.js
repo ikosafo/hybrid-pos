@@ -9,10 +9,11 @@ const SettingsPageModule = {
 
     async load() {
         document.getElementById('page-content').innerHTML = `
-            <div style="display:flex;gap:8px;margin-bottom:24px;border-bottom:1px solid var(--border);padding-bottom:0;">
+            <div class="tabs-container">
                 ${[
                     { id: 'store',    icon: 'store',          label: 'Store Settings' },
                     { id: 'users',    icon: 'users',          label: 'User Management' },
+                    { id: 'resets',   icon: 'key',            label: 'Password Resets' },
                     { id: 'password', icon: 'lock',           label: 'Change Password' },
                     { id: 'about',    icon: 'info-circle',    label: 'About' },
                 ].map(tab => `
@@ -28,7 +29,7 @@ const SettingsPageModule = {
         `;
 
         // Add tab styles
-        if (!document.getElementById('settings-tab-style')) {
+       /*  if (!document.getElementById('settings-tab-style')) {
             const style = document.createElement('style');
             style.id = 'settings-tab-style';
             style.textContent = `
@@ -47,6 +48,8 @@ const SettingsPageModule = {
                     font-family: inherit;
                     background: none;
                     cursor: pointer;
+                    white-space: nowrap;
+                    flex-shrink: 0;
                 }
                 .settings-tab:hover { color: var(--text-primary); }
                 .settings-tab.active {
@@ -55,13 +58,13 @@ const SettingsPageModule = {
                 }
             `;
             document.head.appendChild(style);
-        }
+        } */
 
-        await this.switchTab(this.activeTab);
+        await SettingsPageModule.switchTab(SettingsPageModule.activeTab);
     },
 
     async switchTab(tab) {
-        this.activeTab = tab;
+        SettingsPageModule.activeTab = tab;
         document.querySelectorAll('.settings-tab').forEach(t => {
             t.classList.toggle('active', t.dataset.tab === tab);
         });
@@ -70,10 +73,11 @@ const SettingsPageModule = {
         el.innerHTML = `<div class="empty-state"><i class="fas fa-spinner fa-spin"></i></div>`;
 
         switch (tab) {
-            case 'store':    await this.loadStoreSettings(); break;
-            case 'users':    await this.loadUsers();         break;
-            case 'password': this.loadChangePassword();      break;
-            case 'about':    this.loadAbout();               break;
+            case 'store':    await SettingsPageModule.loadStoreSettings(); break;
+            case 'users':    await SettingsPageModule.loadUsers();         break;
+            case 'resets':   await SettingsPageModule.loadPasswordResets(); break;
+            case 'password': SettingsPageModule.loadChangePassword();      break;
+            case 'about':    SettingsPageModule.loadAbout();               break;
         }
     },
 
@@ -81,13 +85,16 @@ const SettingsPageModule = {
     async loadStoreSettings() {
         const res = await API.get('/settings');
         if (!res?.success) { Toast.show('Failed to load settings', 'error'); return; }
-        this.settings = res.data;
-        const s = this.settings;
+        SettingsPageModule.settings = res.data;
+        const s = SettingsPageModule.settings;
 
         document.getElementById('settings-content').innerHTML = `
             <div class="card">
                 <div class="card-header">
-                    <h3 class="card-title"><i class="fas fa-store" style="color:var(--accent);margin-right:8px;"></i>Store Information</h3>
+                    <h3 class="card-title">
+                        <i class="fas fa-store" style="color:var(--accent);margin-right:8px;"></i>
+                        Store Information
+                    </h3>
                 </div>
                 <div class="card-body">
                     <div class="form-row">
@@ -127,7 +134,10 @@ const SettingsPageModule = {
 
             <div class="card" style="margin-top:20px;">
                 <div class="card-header">
-                    <h3 class="card-title"><i class="fas fa-coins" style="color:var(--warning);margin-right:8px;"></i>Currency & Tax</h3>
+                    <h3 class="card-title">
+                        <i class="fas fa-coins" style="color:var(--warning);margin-right:8px;"></i>
+                        Currency & Tax
+                    </h3>
                 </div>
                 <div class="card-body">
                     <div class="form-row">
@@ -156,12 +166,16 @@ const SettingsPageModule = {
 
             <div class="card" style="margin-top:20px;">
                 <div class="card-header">
-                    <h3 class="card-title"><i class="fas fa-receipt" style="color:var(--success);margin-right:8px;"></i>Receipt</h3>
+                    <h3 class="card-title">
+                        <i class="fas fa-receipt" style="color:var(--success);margin-right:8px;"></i>
+                        Receipt
+                    </h3>
                 </div>
                 <div class="card-body">
                     <div class="form-group">
                         <label>Receipt Footer Message</label>
-                        <textarea id="s-receipt-footer" placeholder="e.g. Thank you for shopping with us! Returns accepted within 7 days."
+                        <textarea id="s-receipt-footer"
+                            placeholder="e.g. Thank you for shopping with us! Returns accepted within 7 days."
                             style="min-height:100px;">${s.receipt_footer || ''}</textarea>
                     </div>
                 </div>
@@ -210,8 +224,8 @@ const SettingsPageModule = {
                 </div>`;
             return;
         }
-        this.users = res.data;
-        this.renderUsers();
+        SettingsPageModule.users = res.data;
+        SettingsPageModule.renderUsers();
     },
 
     renderUsers() {
@@ -228,7 +242,9 @@ const SettingsPageModule = {
                     <h3 class="card-title">
                         <i class="fas fa-users" style="color:var(--accent);margin-right:8px;"></i>
                         System Users
-                        <span class="badge badge-info" style="margin-left:8px;">${this.users.length}</span>
+                        <span class="badge badge-info" style="margin-left:8px;">
+                            ${SettingsPageModule.users.length}
+                        </span>
                     </h3>
                     <button class="btn btn-primary btn-sm" onclick="SettingsPageModule.openUserModal()">
                         <i class="fas fa-plus"></i> Add User
@@ -242,7 +258,7 @@ const SettingsPageModule = {
                                 <th>PIN</th><th>Status</th><th>Joined</th><th>Actions</th>
                             </tr></thead>
                             <tbody>
-                                ${this.users.map(u => `
+                                ${SettingsPageModule.users.map(u => `
                                 <tr>
                                     <td>
                                         <div style="display:flex;align-items:center;gap:10px;">
@@ -256,14 +272,20 @@ const SettingsPageModule = {
                                         </div>
                                     </td>
                                     <td style="color:var(--text-muted);">${u.email}</td>
-                                    <td><span class="badge ${roleColors[u.role] || 'badge-info'}">${u.role}</span></td>
+                                    <td>
+                                        <span class="badge ${roleColors[u.role] || 'badge-info'}">
+                                            ${u.role}
+                                        </span>
+                                    </td>
                                     <td style="color:var(--text-muted);">${u.pin || '—'}</td>
                                     <td>
                                         <span class="badge ${u.is_active ? 'badge-success' : 'badge-danger'}">
                                             ${u.is_active ? 'Active' : 'Inactive'}
                                         </span>
                                     </td>
-                                    <td style="color:var(--text-muted);font-size:12px;">${formatDate(u.created_at)}</td>
+                                    <td style="color:var(--text-muted);font-size:12px;">
+                                        ${formatDate(u.created_at)}
+                                    </td>
                                     <td>
                                         <div style="display:flex;gap:6px;">
                                             <button class="btn btn-ghost btn-sm"
@@ -287,13 +309,15 @@ const SettingsPageModule = {
     },
 
     openUserModal(id = null) {
-        const u = id ? this.users.find(x => x.id === id) : null;
+        const u = id ? SettingsPageModule.users.find(x => x.id == id) : null;
         Modal.show(`
             <div class="modal-overlay">
                 <div class="modal">
                     <div class="modal-header">
                         <h3 class="modal-title">${u ? 'Edit' : 'Add'} User</h3>
-                        <button class="btn-icon" onclick="Modal.close()"><i class="fas fa-times"></i></button>
+                        <button class="btn-icon" onclick="Modal.close()">
+                            <i class="fas fa-times"></i>
+                        </button>
                     </div>
                     <div class="modal-body">
                         <div class="form-row">
@@ -312,7 +336,8 @@ const SettingsPageModule = {
                         </div>
                         <div class="form-group">
                             <label>Email *</label>
-                            <input type="email" id="u-email" value="${u?.email || ''}" placeholder="user@example.com">
+                            <input type="email" id="u-email" value="${u?.email || ''}"
+                                placeholder="user@example.com">
                         </div>
                         <div class="form-row">
                             <div class="form-group">
@@ -337,7 +362,8 @@ const SettingsPageModule = {
                     </div>
                     <div class="modal-footer">
                         <button class="btn btn-ghost" onclick="Modal.close()">Cancel</button>
-                        <button class="btn btn-primary" onclick="SettingsPageModule.saveUser(${id || 'null'})">
+                        <button class="btn btn-primary"
+                            onclick="SettingsPageModule.saveUser(${id || 'null'})">
                             <i class="fas fa-save"></i> ${u ? 'Update' : 'Create'} User
                         </button>
                     </div>
@@ -357,9 +383,9 @@ const SettingsPageModule = {
             is_active: id ? parseInt(document.getElementById('u-active')?.value ?? 1) : 1,
         };
 
-        if (!data.name)              { Toast.show('Name is required', 'warning'); return; }
-        if (!data.email)             { Toast.show('Email is required', 'warning'); return; }
-        if (!id && !data.password)   { Toast.show('Password is required', 'warning'); return; }
+        if (!data.name)            { Toast.show('Name is required', 'warning'); return; }
+        if (!data.email)           { Toast.show('Email is required', 'warning'); return; }
+        if (!id && !data.password) { Toast.show('Password is required', 'warning'); return; }
         if (data.password && data.password.length < 6) {
             Toast.show('Password must be at least 6 characters', 'warning'); return;
         }
@@ -371,7 +397,7 @@ const SettingsPageModule = {
         if (res?.success) {
             Modal.close();
             Toast.show(`User ${id ? 'updated' : 'created'} successfully`, 'success');
-            await this.loadUsers();
+            await SettingsPageModule.loadUsers();
         } else {
             Toast.show(res?.message || 'Failed to save user', 'error');
         }
@@ -384,13 +410,193 @@ const SettingsPageModule = {
                 const res = await API.put(`/users/${id}/toggle`, {});
                 if (res?.success) {
                     Toast.show(res.message, 'success');
-                    await this.loadUsers();
+                    await SettingsPageModule.loadUsers();
                 } else {
                     Toast.show(res?.message || 'Failed', 'error');
                 }
             },
             `${isActive ? 'Deactivate' : 'Activate'} User`
         );
+    },
+
+    // ── Password Reset Requests ──────────
+    async loadPasswordResets() {
+        const res = await API.get('/password-resets');
+        const el  = document.getElementById('settings-content');
+
+        if (!res?.success) {
+            el.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-lock"></i>
+                    <h3>Access Denied</h3>
+                    <p>Only admins can view password reset requests</p>
+                </div>`;
+            return;
+        }
+
+        const resets = res.data;
+
+        el.innerHTML = `
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-key" style="color:var(--warning);margin-right:8px;"></i>
+                        Password Reset Requests
+                        <span class="badge badge-warning" style="margin-left:8px;">
+                            ${resets.length}
+                        </span>
+                    </h3>
+                    <button class="btn btn-ghost btn-sm"
+                        onclick="SettingsPageModule.loadPasswordResets()">
+                        <i class="fas fa-sync"></i> Refresh
+                    </button>
+                </div>
+                <div class="card-body" style="padding:0;">
+                    ${!resets.length ? `
+                        <div class="empty-state">
+                            <i class="fas fa-check-circle" style="color:var(--success);"></i>
+                            <h3>No pending requests</h3>
+                            <p>No users have requested a password reset</p>
+                        </div>` : `
+                    <div class="table-wrapper">
+                        <table>
+                            <thead><tr>
+                                <th>User Email</th>
+                                <th>Requested</th>
+                                <th>Expires</th>
+                                <th>Status</th>
+                                <th>Action</th>
+                            </tr></thead>
+                            <tbody>
+                                ${resets.map(r => `
+                                <tr>
+                                    <td><strong>${r.email}</strong></td>
+                                    <td style="color:var(--text-muted);font-size:12px;">
+                                        ${formatDateTime(r.created_at)}
+                                    </td>
+                                    <td style="color:var(--text-muted);font-size:12px;">
+                                        ${formatDateTime(r.expires_at)}
+                                    </td>
+                                    <td>
+                                        <span class="badge ${r.used ? 'badge-success' :
+                                            new Date(r.expires_at) < new Date() ? 'badge-danger' : 'badge-warning'}">
+                                            ${r.used ? 'Used' :
+                                              new Date(r.expires_at) < new Date() ? 'Expired' : 'Pending'}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        ${!r.used && new Date(r.expires_at) > new Date() ? `
+                                        <button class="btn btn-primary btn-sm"
+                                            onclick="SettingsPageModule.copyResetLink('${r.token}')">
+                                            <i class="fas fa-copy"></i> Copy Link
+                                        </button>` : `
+                                        <span style="color:var(--text-muted);font-size:12px;">—</span>`}
+                                    </td>
+                                </tr>`).join('')}
+                            </tbody>
+                        </table>
+                    </div>`}
+                </div>
+            </div>
+
+            <div class="card" style="margin-top:20px;">
+                <div class="card-header">
+                    <h3 class="card-title">
+                        <i class="fas fa-plus-circle" style="color:var(--success);margin-right:8px;"></i>
+                        Generate Reset Link for User
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">
+                        Generate a password reset link for any user and share it with them
+                        via WhatsApp, SMS, or any messaging platform.
+                    </p>
+                    <div style="display:flex;gap:12px;align-items:flex-end;">
+                        <div class="form-group" style="flex:1;margin-bottom:0;">
+                            <label>User Email</label>
+                            <input type="email" id="manual-reset-email"
+                                placeholder="user@example.com">
+                        </div>
+                        <button class="btn btn-primary"
+                            onclick="SettingsPageModule.generateResetLink()">
+                            <i class="fas fa-link"></i> Generate Link
+                        </button>
+                    </div>
+                    <div id="generated-link-box" style="display:none;margin-top:16px;">
+                        <div style="background:var(--bg-tertiary);border-radius:var(--radius-sm);
+                            padding:14px;border:1px solid var(--border);">
+                            <div style="font-size:11px;color:var(--text-muted);margin-bottom:8px;
+                                font-weight:600;text-transform:uppercase;">
+                                Reset Link (valid 1 hour)
+                            </div>
+                            <div style="display:flex;gap:8px;align-items:center;">
+                                <code id="generated-link-text"
+                                    style="font-size:12px;color:var(--accent);
+                                    word-break:break-all;flex:1;"></code>
+                                <button class="btn btn-primary btn-sm"
+                                    onclick="SettingsPageModule.copyGeneratedLink()">
+                                    <i class="fas fa-copy"></i> Copy
+                                </button>
+                            </div>
+                        </div>
+                        <p style="font-size:12px;color:var(--text-muted);margin-top:8px;">
+                            <i class="fas fa-info-circle"></i>
+                            Share this link with the user via WhatsApp, SMS or email.
+                            It expires in 1 hour.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        `;
+    },
+
+    async generateResetLink() {
+        const email = document.getElementById('manual-reset-email')?.value.trim();
+        if (!email) { Toast.show('Please enter a user email', 'warning'); return; }
+
+        const res = await API.post('/auth/forgot-password', { email });
+        if (!res?.success) {
+            Toast.show(res?.message || 'Failed to generate link', 'error');
+            return;
+        }
+
+        // Fetch the token we just created
+        const tokenRes = await API.get(`/password-resets/token?email=${encodeURIComponent(email)}`);
+        if (tokenRes?.success && tokenRes.data?.token) {
+            const link = `https://bestcobb.shop/public/reset-password.php?token=${tokenRes.data.token}`;
+            document.getElementById('generated-link-text').textContent = link;
+            document.getElementById('generated-link-box').style.display = 'block';
+            Toast.show('Reset link generated!', 'success');
+        } else {
+            Toast.show('Link generated. Check Password Reset Requests tab.', 'info');
+        }
+    },
+
+    copyResetLink(token) {
+        const link = `https://bestcobb.shop/public/reset-password.php?token=${token}`;
+        SettingsPageModule.copyToClipboard(link);
+    },
+
+    copyGeneratedLink() {
+        const text = document.getElementById('generated-link-text')?.textContent;
+        if (text) SettingsPageModule.copyToClipboard(text);
+    },
+
+    copyToClipboard(text) {
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(text).then(() => {
+                Toast.show('Link copied to clipboard!', 'success');
+            });
+        } else {
+            // Fallback
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            Toast.show('Link copied!', 'success');
+        }
     },
 
     // ── Change Password ──────────────────
@@ -431,7 +637,9 @@ const SettingsPageModule = {
 
         if (!current) { Toast.show('Current password is required', 'warning'); return; }
         if (!newPass)  { Toast.show('New password is required', 'warning'); return; }
-        if (newPass.length < 6) { Toast.show('Password must be at least 6 characters', 'warning'); return; }
+        if (newPass.length < 6) {
+            Toast.show('Password must be at least 6 characters', 'warning'); return;
+        }
         if (newPass !== confirm) { Toast.show('Passwords do not match', 'warning'); return; }
 
         const res = await API.put('/users/change-password', {
@@ -454,13 +662,16 @@ const SettingsPageModule = {
         document.getElementById('settings-content').innerHTML = `
             <div class="card" style="max-width:560px;">
                 <div class="card-body" style="text-align:center;padding:40px;">
-                    <div class="logo-icon" style="width:72px;height:72px;font-size:30px;margin:0 auto 20px;">
+                    <div class="logo-icon"
+                        style="width:72px;height:72px;font-size:30px;margin:0 auto 20px;">
                         <i class="fas fa-bolt"></i>
                     </div>
                     <h2 style="font-size:24px;font-weight:800;margin-bottom:8px;">HybridPOS</h2>
-                    <p style="color:var(--text-muted);margin-bottom:24px;">Professional Point of Sale System</p>
-
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;text-align:left;margin-bottom:24px;">
+                    <p style="color:var(--text-muted);margin-bottom:24px;">
+                        Professional Point of Sale System
+                    </p>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;
+                        text-align:left;margin-bottom:24px;">
                         ${[
                             ['Version',    'v1.0.0'],
                             ['Build',      'Production Ready'],
@@ -469,14 +680,16 @@ const SettingsPageModule = {
                             ['Offline',    'IndexedDB + Service Worker'],
                             ['License',    'Commercial'],
                         ].map(([label, value]) => `
-                            <div style="background:var(--bg-tertiary);border-radius:var(--radius-sm);padding:12px;">
-                                <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">${label}</div>
+                            <div style="background:var(--bg-tertiary);
+                                border-radius:var(--radius-sm);padding:12px;">
+                                <div style="font-size:11px;color:var(--text-muted);
+                                    margin-bottom:4px;">${label}</div>
                                 <div style="font-weight:600;font-size:13px;">${value}</div>
                             </div>
                         `).join('')}
                     </div>
-
-                    <div style="background:var(--success-light);border-radius:var(--radius-sm);padding:16px;">
+                    <div style="background:var(--success-light);border-radius:var(--radius-sm);
+                        padding:16px;">
                         <div style="color:var(--success);font-weight:700;margin-bottom:4px;">
                             <i class="fas fa-check-circle"></i> System Status: Healthy
                         </div>

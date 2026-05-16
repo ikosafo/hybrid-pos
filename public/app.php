@@ -56,6 +56,12 @@ session_start();
                     <span class="btn-text">Sign In</span>
                     <span class="btn-loader hidden"><i class="fas fa-spinner fa-spin"></i></span>
                 </button>
+                <div style="text-align:center;margin-top:16px;">
+                    <a href="#" onclick="showForgotPassword()" 
+                        style="color:var(--accent);font-size:13px;font-weight:500;">
+                        Forgot your password?
+                    </a>
+                </div>
             </form>
             <div class="auth-footer">
                 <span class="online-badge" id="connection-badge">
@@ -111,6 +117,18 @@ session_start();
                     <a href="#" class="nav-item" data-page="customers">
                         <i class="fas fa-users"></i>
                         <span>Customers</span>
+                    </a>
+                    <a href="#" class="nav-item" data-page="stock">
+                        <i class="fas fa-warehouse"></i>
+                        <span>Stock</span>
+                    </a>
+                    <a href="#" class="nav-item" data-page="expenses">
+                        <i class="fas fa-file-invoice-dollar"></i>
+                        <span>Expenses</span>
+                    </a>
+                    <a href="#" class="nav-item" data-page="reports">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>Reports</span>
                     </a>
                 </div>
                 <div class="nav-section">
@@ -185,6 +203,10 @@ session_start();
 <script src="/public/assets/js/pages/orders.js"></script>
 <script src="/public/assets/js/offline.js"></script>
 <script src="/public/assets/js/pages/settings.js"></script>
+<script src="/public/assets/js/pages/stock.js"></script>
+<script src="/public/assets/js/pages/expenses.js"></script>
+<script src="/public/assets/js/pages/reports.js"></script>
+
 <script>
 // Register Service Worker
 if ('serviceWorker' in navigator) {

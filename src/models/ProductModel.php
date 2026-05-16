@@ -96,7 +96,7 @@ class ProductModel {
             WHERE id=?
         ');
         $stmt->bind_param(
-            'issssddissi',
+            'issssddisisi',
             $d['category_id'],
             $d['name'],
             $d['sku'],
