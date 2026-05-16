@@ -56,22 +56,34 @@ const SyncEngine = {
         console.log('[SyncEngine] Starting sync...');
 
         try {
-            // Get live server token
             const liveToken = await this.getLiveToken();
             if (!liveToken) {
                 throw new Error('Could not authenticate with live server');
             }
 
-            // Push local changes to live
-            await this.pushToLive(liveToken);
+            // Check if local DB is empty — do full sync
+            const isFirstSync = await this.isFirstSync();
 
-            // Pull live changes to local
-            await this.pullFromLive(liveToken);
+            if (isFirstSync) {
+                console.log('[SyncEngine] First sync detected — pulling all data from live');
+                Toast.show('Setting up local database...', 'info', 3000);
+                await this.pullFromLive(liveToken, '1970-01-01 00:00:00');
+                await this.pushToLive(liveToken);
+            } else {
+                // Normal sync
+                await this.pushToLive(liveToken);
+                await this.pullFromLive(liveToken);
+            }
 
-            // Update sync time
             this.lastSyncTime = new Date();
             this.saveLastSyncTime();
             this.updateSyncUI('synced');
+
+            // Refresh current page after sync
+            if (isFirstSync) {
+                Toast.show('Local database ready!', 'success', 3000);
+                setTimeout(() => Router.navigate(Router.currentPage || 'pos'), 1000);
+            }
 
             console.log('[SyncEngine] Sync complete at', this.lastSyncTime);
 
@@ -80,6 +92,25 @@ const SyncEngine = {
             this.updateSyncUI('error');
         } finally {
             this.isSyncing = false;
+        }
+    },
+
+    // Check if local DB needs initial sync
+    async isFirstSync() {
+        try {
+            const res = await API.get('/sync/status');
+            if (!res?.success) return false;
+
+            const status = res.data.status;
+
+            // If all tables are empty — it's a first sync
+            const totalRecords = Object.values(status)
+                .reduce((sum, table) => sum + parseInt(table.total || 0), 0);
+
+            console.log('[SyncEngine] Total local records:', totalRecords);
+            return totalRecords === 0;
+        } catch (e) {
+            return false;
         }
     },
 
@@ -188,7 +219,7 @@ const SyncEngine = {
     },
 
     // ── Pull live data to local ──────────────
-    async pullFromLive(liveToken) {
+    async pullFromLive(liveToken, forceSince = null) {
         const entities = [
             'categories',
             'products',
@@ -197,9 +228,9 @@ const SyncEngine = {
             'expenses',
         ];
 
-        const since = this.lastSyncTime
+        const since = forceSince || (this.lastSyncTime
             ? this.lastSyncTime.toISOString().replace('T', ' ').split('.')[0]
-            : '1970-01-01 00:00:00';
+            : '1970-01-01 00:00:00');
 
         for (const entity of entities) {
             try {
