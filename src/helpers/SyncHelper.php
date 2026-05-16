@@ -118,6 +118,21 @@ class SyncHelper {
     }
 
     private static function upsertProduct(mysqli $conn, array $r): bool {
+        // Resolve category_id from category_uuid
+        $categoryId = null;
+        if (!empty($r['category_uuid'])) {
+            $cstmt = $conn->prepare(
+                'SELECT id FROM categories WHERE uuid = ? LIMIT 1'
+            );
+            $cstmt->bind_param('s', $r['category_uuid']);
+            $cstmt->execute();
+            $cat = $cstmt->get_result()->fetch_assoc();
+            $cstmt->close();
+            $categoryId = $cat['id'] ?? null;
+        } elseif (!empty($r['category_id'])) {
+            $categoryId = (int)$r['category_id'];
+        }
+
         $stmt = $conn->prepare('
             INSERT INTO products (
                 uuid, category_id, name, sku, barcode,
@@ -127,6 +142,7 @@ class SyncHelper {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
             ON DUPLICATE KEY UPDATE
                 name            = VALUES(name),
+                category_id     = VALUES(category_id),
                 price           = VALUES(price),
                 cost_price      = VALUES(cost_price),
                 stock_qty       = IF(VALUES(updated_at) > updated_at,
@@ -141,7 +157,6 @@ class SyncHelper {
         ');
 
         $uuid          = $r['uuid'];
-        $categoryId    = $r['category_id'] ? (int)$r['category_id'] : null;
         $name          = $r['name'];
         $sku           = $r['sku'];
         $barcode       = $r['barcode'];
@@ -345,7 +360,7 @@ class SyncHelper {
             ",
             'categories' => "
                 SELECT * FROM categories
-                WHERE created_at > ?
+                WHERE created_at > ? OR updated_at > ?
                 ORDER BY created_at DESC
                 LIMIT {$limit}
             ",
@@ -374,7 +389,7 @@ class SyncHelper {
         $sql  = $queries[$entityType];
         $stmt = $conn->prepare($sql);
 
-        if ($entityType === 'orders') {
+        if ($entityType === 'orders' || $entityType === 'categories') {
             $stmt->bind_param('ss', $since, $since);
         } else {
             $stmt->bind_param('s', $since);

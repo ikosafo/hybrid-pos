@@ -107,3 +107,41 @@ addRoute('POST', '/api/sync/acknowledge', function () {
     $synced = SyncHelper::markSynced($body['entity_type'], $body['uuids']);
     Response::success(['marked' => $synced], 'Records acknowledged');
 });
+
+
+// POST /api/sync/delete — Sync a deletion
+addRoute('POST', '/api/sync/delete', function () {
+    AuthMiddleware::handle();
+    $body = json_decode(file_get_contents('php://input'), true);
+
+    if (empty($body['entity_type'])) Response::error('entity_type required', 422);
+    if (empty($body['uuid']))        Response::error('uuid required', 422);
+
+    $conn       = getDBConnection();
+    $entityType = $body['entity_type'];
+    $uuid       = $body['uuid'];
+
+    $tables = [
+        'categories' => 'categories',
+        'products'   => 'products',
+        'customers'  => 'customers',
+        'expenses'   => 'expenses',
+    ];
+
+    if (!isset($tables[$entityType])) {
+        Response::error('Invalid entity type', 422);
+    }
+
+    $table = $tables[$entityType];
+    $stmt  = $conn->prepare("
+        UPDATE {$table}
+        SET is_active = 0, is_synced = 1, synced_at = NOW()
+        WHERE uuid = ?
+    ");
+    $stmt->bind_param('s', $uuid);
+    $stmt->execute();
+    $affected = $stmt->affected_rows;
+    $stmt->close();
+
+    Response::success(['affected' => $affected], 'Deletion synced');
+});
