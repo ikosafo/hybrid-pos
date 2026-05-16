@@ -1,6 +1,6 @@
 {
-    "name": "HybridPOS",
-    "short_name": "HybridPOS",
+    "name": "BestCobb",
+    "short_name": "BestCobb",
     "description": "Professional Point of Sale System",
     "start_url": "/public/",
     "display": "standalone",

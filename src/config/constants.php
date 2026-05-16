@@ -1,5 +1,5 @@
 <?php
-define('APP_NAME', 'HybridPOS');
+define('APP_NAME', 'BestCobb');
 define('APP_VERSION', '1.0.0');
 define('APP_ENV', 'development'); // change to 'production' on live server
 

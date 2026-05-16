@@ -666,7 +666,7 @@ const SettingsPageModule = {
                         style="width:72px;height:72px;font-size:30px;margin:0 auto 20px;">
                         <i class="fas fa-bolt"></i>
                     </div>
-                    <h2 style="font-size:24px;font-weight:800;margin-bottom:8px;">HybridPOS</h2>
+                    <h2 style="font-size:24px;font-weight:800;margin-bottom:8px;">Best Cobb</h2>
                     <p style="color:var(--text-muted);margin-bottom:24px;">
                         Professional Point of Sale System
                     </p>
