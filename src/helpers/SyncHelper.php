@@ -41,94 +41,65 @@ class SyncHelper {
         }
     }
 
+
     private static function upsertOrder(mysqli $conn, array $r): bool {
-        $conn->begin_transaction();
-        
         try {
             // Check if order already exists
-            $checkStmt = $conn->prepare('SELECT id, is_synced FROM orders WHERE uuid = ?');
+            $checkStmt = $conn->prepare('SELECT id FROM orders WHERE uuid = ?');
             $checkStmt->bind_param('s', $r['uuid']);
             $checkStmt->execute();
             $existing = $checkStmt->get_result()->fetch_assoc();
             $checkStmt->close();
             
-            // Determine sync status:
-            // - If order is coming FROM the other server (sync), mark as synced
-            // - If order already exists, preserve its sync status
-            // - This works symmetrically on both local and live
+            $isSynced = $existing ? 1 : 1; // Always 1 when coming from sync
+            
             if ($existing) {
-                // Order exists - keep current sync status
-                $isSynced = $existing['is_synced'];
+                // Update existing order
+                $stmt = $conn->prepare('UPDATE orders SET status=?, is_synced=1, synced_at=NOW() WHERE id=?');
+                $stmt->bind_param('si', $r['status'], $existing['id']);
+                $stmt->execute();
+                $orderId = $existing['id'];
+                $stmt->close();
             } else {
-                // New order being received from sync - mark as synced
-                // (it's already on the other server)
-                $isSynced = 1;
+                // Insert new order
+                $customerId = !empty($r['customer_id']) ? (int)$r['customer_id'] : 0;
+                $stmt = $conn->prepare('
+                    INSERT INTO orders (
+                        uuid, order_number, customer_id, cashier_id,
+                        status, subtotal, discount_amount, discount_type,
+                        tax_amount, total_amount, amount_tendered, change_due,
+                        payment_method, notes, is_synced, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+                ');
+                $notes = $r['notes'] ?? '';
+                $stmt->bind_param(
+                    'ssiisddsddddsss',
+                    $r['uuid'], $r['order_number'],
+                    $customerId, $r['cashier_id'],
+                    $r['status'],
+                    $r['subtotal'], $r['discount_amount'], $r['discount_type'],
+                    $r['tax_amount'], $r['total_amount'],
+                    $r['amount_tendered'], $r['change_due'],
+                    $r['payment_method'], $notes,
+                    $r['created_at']
+                );
+                $stmt->execute();
+                $orderId = $conn->insert_id;
+                $stmt->close();
             }
             
-            $stmt = $conn->prepare('
-                INSERT INTO orders (
-                    uuid, order_number, customer_id, cashier_id,
-                    status, subtotal, discount_amount, discount_type,
-                    tax_amount, total_amount, amount_tendered, change_due,
-                    payment_method, notes, is_synced, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE
-                    status    = VALUES(status),
-                    is_synced = VALUES(is_synced),
-                    synced_at = NOW()
-            ');
-
-            $uuid           = $r['uuid'];
-            $orderNumber    = $r['order_number'];
-            $customerId = $r['customer_id'] ? (int)$r['customer_id'] : 0;
-            $cashierId      = (int)$r['cashier_id'];
-            $status         = $r['status'];
-            $subtotal       = (float)$r['subtotal'];
-            $discountAmount = (float)$r['discount_amount'];
-            $discountType   = $r['discount_type'];
-            $taxAmount      = (float)$r['tax_amount'];
-            $totalAmount    = (float)$r['total_amount'];
-            $amtTendered    = (float)$r['amount_tendered'];
-            $changeDue      = (float)$r['change_due'];
-            $paymentMethod  = $r['payment_method'];
-            $notes          = $r['notes'] ?? '';
-            $createdAt      = $r['created_at'];
-
-            $stmt->bind_param(
-                'ssiisddsddddsssis',
-                $uuid, $orderNumber,
-                $customerId, $cashierId,
-                $status,
-                $subtotal, $discountAmount, $discountType,
-                $taxAmount, $totalAmount,
-                $amtTendered, $changeDue,
-                $paymentMethod, $notes,
-                $isSynced,  // ← From sync = 1, keep existing status
-                $createdAt
-            );
-
-            $stmt->execute();
-            $orderId = $conn->insert_id ?: ($existing['id'] ?? 0);
-            $stmt->close();
-
-            // Sync order items (only if provided)
-            if (!empty($r['items']) && is_array($r['items']) && $orderId > 0) {
-                // Delete existing items to prevent duplicates
-                $delStmt = $conn->prepare('DELETE FROM order_items WHERE order_id = ?');
-                $delStmt->bind_param('i', $orderId);
-                $delStmt->execute();
-                $delStmt->close();
-
+            // Sync order items
+            if (!empty($r['items']) && $orderId > 0) {
+                // Delete existing items
+                $conn->query("DELETE FROM order_items WHERE order_id = {$orderId}");
+                
+                // Insert items
                 $itemStmt = $conn->prepare('
-                    INSERT INTO order_items (
-                        order_id, product_id, product_name,
-                        unit_price, quantity, total
-                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO order_items (order_id, product_id, product_name, unit_price, quantity, total)
+                    VALUES (?, ?, ?, ?, ?, ?)
                 ');
-
                 foreach ($r['items'] as $item) {
-                    $itemStmt->bind_param(
-                        'iisddd',
+                    $itemStmt->bind_param('iisddd',
                         $orderId,
                         $item['product_id'],
                         $item['product_name'],
@@ -140,15 +111,14 @@ class SyncHelper {
                 }
                 $itemStmt->close();
             }
-
-            $conn->commit();
+            
             return true;
         } catch (Exception $e) {
-            $conn->rollback();
             error_log('[SyncHelper] upsertOrder failed: ' . $e->getMessage());
             return false;
         }
     }
+
 
     private static function upsertOrderItem(mysqli $conn, array $r): bool {
         $ostmt = $conn->prepare('SELECT id FROM orders WHERE uuid = ? LIMIT 1');
