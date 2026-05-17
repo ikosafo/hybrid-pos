@@ -116,6 +116,7 @@ const SyncEngine = {
 
     // ── Get live server auth token ───────────
     async getLiveToken() {
+        console.log('[SyncEngine] getLiveToken called');
         const cached = localStorage.getItem('live_sync_token');
         const expiry = localStorage.getItem('live_sync_token_expiry');
 
@@ -169,6 +170,7 @@ const SyncEngine = {
         ];
 
         for (const entity of entities) {
+            console.log(`[DEBUG] pushToLive: trying ${entity}`);  // ← ADD THIS
             try {
                 await this.pushEntity(entity, liveToken);
             } catch (e) {
@@ -183,6 +185,8 @@ const SyncEngine = {
         const localRes = await API.get(
             `/sync/pull?entity_type=${entityType}&since=1970-01-01&unsynced_only=true`
         );
+
+        console.log(`[DEBUG] pushEntity ${entityType}:`, localRes?.data?.records?.length || 0, 'records');  // ← ADD THIS
 
         if (!localRes?.success || !localRes.data.records.length) return;
 
