@@ -30,6 +30,22 @@ addRoute('POST', '/api/users', function () {
     $existing = UserModel::findByEmail($body['email']);
     if ($existing) Response::error('Email already exists', 422);
 
+    // Check PIN unique
+    if (!empty($body['pin'])) {
+        $conn    = getDBConnection();
+        $pinStmt = $conn->prepare(
+            'SELECT id FROM users WHERE pin = ? LIMIT 1'
+        );
+        $pinStmt->bind_param('s', $body['pin']);
+        $pinStmt->execute();
+        if ($pinStmt->get_result()->fetch_assoc()) {
+            Response::error(
+                'This PIN is already used by another user.', 422
+            );
+        }
+        $pinStmt->close();
+    }
+
     $data = [
         'name'     => trim($body['name']),
         'email'    => trim($body['email']),
@@ -60,6 +76,23 @@ addRoute('PUT', '/api/users/{id}', function ($params) {
         Response::error('Email already taken by another user', 422);
     }
 
+    // Check PIN unique (exclude current user)
+    if (!empty($body['pin'])) {
+        $conn    = getDBConnection();
+        $pinStmt = $conn->prepare(
+            'SELECT id FROM users WHERE pin = ? AND id != ? LIMIT 1'
+        );
+        $userId  = (int)$params['id'];
+        $pinStmt->bind_param('si', $body['pin'], $userId);
+        $pinStmt->execute();
+        if ($pinStmt->get_result()->fetch_assoc()) {
+            Response::error(
+                'This PIN is already used by another user.', 422
+            );
+        }
+        $pinStmt->close();
+    }
+
     $data = [
         'name'      => trim($body['name']),
         'email'     => trim($body['email']),
@@ -70,7 +103,6 @@ addRoute('PUT', '/api/users/{id}', function ($params) {
 
     UserModel::update((int)$params['id'], $data);
 
-    // Update password if provided
     if (!empty($body['password'])) {
         UserModel::updatePassword((int)$params['id'], $body['password']);
     }
@@ -96,9 +128,12 @@ addRoute('PUT', '/api/users/change-password', function () {
     $auth = AuthMiddleware::handle();
     $body = json_decode(file_get_contents('php://input'), true);
 
-    if (empty($body['current_password'])) Response::error('Current password is required', 422);
-    if (empty($body['new_password']))     Response::error('New password is required', 422);
-    if (strlen($body['new_password']) < 6) Response::error('Password must be at least 6 characters', 422);
+    if (empty($body['current_password']))
+        Response::error('Current password is required', 422);
+    if (empty($body['new_password']))
+        Response::error('New password is required', 422);
+    if (strlen($body['new_password']) < 6)
+        Response::error('Password must be at least 6 characters', 422);
 
     $user = UserModel::findById($auth['user_id']);
     if (!password_verify($body['current_password'], $user['password_hash'])) {
@@ -111,7 +146,6 @@ addRoute('PUT', '/api/users/change-password', function () {
 
 // DELETE user
 addRoute('DELETE', '/api/users/{id}', function ($params) {
-    AuthMiddleware::handle(['superadmin']);
     $auth = AuthMiddleware::handle(['superadmin']);
     if ($auth['user_id'] == $params['id']) {
         Response::error('You cannot delete your own account', 400);

@@ -425,24 +425,32 @@ class SyncHelper {
         return $results;
     }
 
+
     public static function markSynced(string $entityType, array $uuids): int {
         $conn  = getDBConnection();
         $table = self::$syncTables[$entityType] ?? null;
         if (!$table) return 0;
+        if (empty($uuids)) return 0;
 
-        $placeholders = implode(',', array_fill(0, count($uuids), '?'));
-        $types        = str_repeat('s', count($uuids));
+        try {
+            $placeholders = implode(',', array_fill(0, count($uuids), '?'));
+            $types        = str_repeat('s', count($uuids));
 
-        $stmt = $conn->prepare("
-            UPDATE {$table}
-            SET is_synced = 1, synced_at = NOW()
-            WHERE uuid IN ({$placeholders})
-        ");
-        $stmt->bind_param($types, ...$uuids);
-        $stmt->execute();
-        $affected = $stmt->affected_rows;
-        $stmt->close();
-        return $affected;
+            $stmt = $conn->prepare("
+                UPDATE {$table}
+                SET is_synced = 1, synced_at = NOW()
+                WHERE uuid IN ({$placeholders})
+            ");
+            $stmt->bind_param($types, ...$uuids);
+            $stmt->execute();
+            $affected = $stmt->affected_rows;
+            $stmt->close();
+            return $affected;
+        } catch (Exception $e) {
+            // Column might not exist — ignore silently
+            error_log('[SyncHelper] markSynced failed for ' . $table . ': ' . $e->getMessage());
+            return 0;
+        }
     }
 
 

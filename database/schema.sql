@@ -14,16 +14,18 @@ DROP TABLE IF EXISTS users;
 SET FOREIGN_KEY_CHECKS = 1;
 
 CREATE TABLE users (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    uuid CHAR(36) NOT NULL UNIQUE,
-    name VARCHAR(100) NOT NULL,
-    email VARCHAR(150) NOT NULL UNIQUE,
+    id            INT AUTO_INCREMENT PRIMARY KEY,
+    uuid          CHAR(36) NOT NULL UNIQUE,
+    name          VARCHAR(100) NOT NULL,
+    email         VARCHAR(150) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL DEFAULT '',
-    role ENUM('superadmin','admin','cashier','manager') DEFAULT 'cashier',
-    pin VARCHAR(6) DEFAULT NULL,
-    is_active TINYINT(1) DEFAULT 1,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    role          ENUM('superadmin','admin','cashier','manager') DEFAULT 'cashier',
+    pin           VARCHAR(6) DEFAULT NULL,
+    is_active     TINYINT(1) DEFAULT 1,
+    is_synced     TINYINT(1) DEFAULT 0,
+    synced_at     TIMESTAMP NULL,
+    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 CREATE TABLE store_settings (

@@ -393,7 +393,12 @@ const SettingsPageModule = {
                                 <input type="text" id="u-pin"
                                     value="${u?.pin || ''}"
                                     placeholder="4-6 digit PIN"
-                                    maxlength="6">
+                                    maxlength="6"
+                                    oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+                                <p style="font-size:11px;color:var(--text-muted);margin-top:4px;">
+                                    <i class="fas fa-info-circle"></i>
+                                    PIN must be unique across all users. Numbers only.
+                                </p>
                             </div>
                         </div>
                         ${u ? `
@@ -716,7 +721,8 @@ const SettingsPageModule = {
                 <div class="card-body" style="text-align:center;padding:40px;">
                     <div class="logo-icon"
                         style="width:72px;height:72px;font-size:30px;margin:0 auto 20px;">
-                        <i class="fas fa-bolt"></i>
+                        <!-- <i class="fas fa-bolt"></i> -->
+                        <img src="/public/assets/images/logo.png" alt="Best Cobb Logo" style="width:100%;height:100%;">
                     </div>
                     <h2 style="font-size:24px;font-weight:800;margin-bottom:8px;">Best Cobb</h2>
                     <p style="color:var(--text-muted);margin-bottom:24px;">

@@ -468,7 +468,10 @@ if ($step === 'database' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POS
 <body>
 <div class="installer">
     <div class="installer-header">
-        <div class="logo"><i class="fas fa-bolt"></i></div>
+        <div class="logo">
+            <!-- <i class="fas fa-bolt"></i> -->
+            <img src="/public/assets/images/logo.png" alt="Best Cobb Logo" style="width:48px;height:48px;margin-bottom:8px;">
+        </div>
         <h1>Best Cobb</h1>
         <p class="subtitle">Installation Wizard</p>
     </div>

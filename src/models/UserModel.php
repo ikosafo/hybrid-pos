@@ -53,7 +53,7 @@ class UserModel {
             UPDATE users SET name=?, email=?, role=?, pin=?, is_active=?
             WHERE id=?
         ');
-        $stmt->bind_param('ssssi i',
+        $stmt->bind_param('ssssii',
             $data['name'], $data['email'],
             $data['role'], $data['pin'],
             $data['is_active'], $id

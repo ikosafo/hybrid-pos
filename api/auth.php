@@ -191,3 +191,45 @@ addRoute('GET', '/api/password-resets', function () {
     ');
     Response::success($result->fetch_all(MYSQLI_ASSOC));
 });
+
+
+// POST /api/auth/pin-login
+addRoute('POST', '/api/auth/pin-login', function () {
+    $body = json_decode(file_get_contents('php://input'), true);
+    $pin  = trim($body['pin'] ?? '');
+
+    if (!$pin) Response::error('PIN is required', 422);
+    if (strlen($pin) < 4) Response::error('Invalid PIN', 422);
+
+    $conn = getDBConnection();
+    $stmt = $conn->prepare('
+        SELECT * FROM users
+        WHERE pin = ? AND is_active = 1
+        LIMIT 1
+    ');
+    $stmt->bind_param('s', $pin);
+    $stmt->execute();
+    $user = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if (!$user) Response::error('Invalid PIN', 401);
+
+    $token = JWT::generate([
+        'user_id' => $user['id'],
+        'uuid'    => $user['uuid'],
+        'name'    => $user['name'],
+        'email'   => $user['email'],
+        'role'    => $user['role'],
+    ]);
+
+    Response::success([
+        'token' => $token,
+        'user'  => [
+            'id'    => $user['id'],
+            'uuid'  => $user['uuid'],
+            'name'  => $user['name'],
+            'email' => $user['email'],
+            'role'  => $user['role'],
+        ],
+    ], 'PIN login successful');
+});

@@ -508,7 +508,148 @@ function showLoginForm() {
     document.getElementById('login-form').classList.remove('hidden');
     const forgot = document.getElementById('forgot-form');
     if (forgot) forgot.remove();
+    const pin = document.getElementById('pin-login-form');
+    if (pin) pin.remove();
+    loginPIN = '';
 }
+
+
+function showPINLogin() {
+    document.getElementById('login-form').classList.add('hidden');
+    document.getElementById('login-error').classList.add('hidden');
+
+    const existing = document.getElementById('pin-login-form');
+    if (existing) existing.remove();
+
+    const pinHTML = `
+        <div id="pin-login-form">
+            <div class="pin-screen">
+                <div style="text-align:center;margin-bottom:8px;">
+                    <div class="logo-icon"
+                        style="width:44px;height:44px;font-size:18px;
+                        margin:0 auto 12px;">
+                        <i class="fas fa-th"></i>
+                    </div>
+                    <h2 style="font-size:20px;font-weight:800;">PIN Login</h2>
+                    <p style="color:var(--text-muted);font-size:13px;margin-top:4px;">
+                        Enter your PIN to login
+                    </p>
+                </div>
+
+                <div class="pin-display" id="login-pin-display">
+                    ${[1,2,3,4,5,6].map(i => `
+                        <div class="pin-dot" id="login-pin-dot-${i}"></div>
+                    `).join('')}
+                </div>
+
+                <div id="login-pin-error"
+                    style="color:var(--danger);font-size:13px;
+                    min-height:20px;text-align:center;">
+                </div>
+
+                <div class="pin-keypad">
+                    ${[1,2,3,4,5,6,7,8,9].map(n => `
+                        <button class="pin-key"
+                            onclick="loginPINPress('${n}')">
+                            ${n}
+                        </button>
+                    `).join('')}
+                    <button class="pin-key pin-zero"
+                        onclick="loginPINPress('0')">0</button>
+                    <button class="pin-key pin-delete"
+                        onclick="loginPINDelete()">
+                        <i class="fas fa-backspace"></i>
+                    </button>
+                    <button class="pin-key pin-enter"
+                        onclick="loginPINSubmit()">
+                        <i class="fas fa-check"></i> Enter
+                    </button>
+                </div>
+
+                <div style="text-align:center;margin-top:8px;">
+                    <a href="#" onclick="showLoginForm()"
+                        style="color:var(--accent);font-size:13px;">
+                        <i class="fas fa-arrow-left"></i> Back to Login
+                    </a>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const card = document.querySelector('.auth-card');
+    card.insertAdjacentHTML('beforeend', pinHTML);
+}
+
+// PIN login state
+let loginPIN = '';
+
+function loginPINPress(digit) {
+    if (loginPIN.length >= 6) return;
+    loginPIN += digit;
+    updateLoginPINDisplay();
+    if (loginPIN.length === 4) {
+        setTimeout(() => {
+            if (loginPIN.length === 4) loginPINSubmit();
+        }, 300);
+    }
+}
+
+function loginPINDelete() {
+    loginPIN = loginPIN.slice(0, -1);
+    updateLoginPINDisplay();
+    const errEl = document.getElementById('login-pin-error');
+    if (errEl) errEl.textContent = '';
+}
+
+function updateLoginPINDisplay() {
+    for (let i = 1; i <= 6; i++) {
+        const dot = document.getElementById(`login-pin-dot-${i}`);
+        if (dot) dot.classList.toggle('filled', i <= loginPIN.length);
+    }
+}
+
+async function loginPINSubmit() {
+    if (!loginPIN) return;
+    const errEl = document.getElementById('login-pin-error');
+    if (errEl) errEl.textContent = '';
+
+    try {
+        const res = await fetch('/public/api/auth/pin-login', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ pin: loginPIN }),
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+            localStorage.setItem('pos_token',
+                data.data.token);
+            localStorage.setItem('pos_user',
+                JSON.stringify(data.data.user));
+            Auth.user = data.data.user;
+
+            // Remove PIN form
+            const pinForm = document.getElementById('pin-login-form');
+            if (pinForm) pinForm.remove();
+
+            Auth.showApp();
+            Toast.show(
+                `Welcome, ${data.data.user.name}!`,
+                'success'
+            );
+        } else {
+            loginPIN = '';
+            updateLoginPINDisplay();
+            if (errEl) errEl.textContent = 'Invalid PIN. Try again.';
+        }
+    } catch (e) {
+        loginPIN = '';
+        updateLoginPINDisplay();
+        if (errEl) errEl.textContent = 'Error. Try again.';
+    }
+}
+
 
 async function sendResetLink() {
     const email  = document.getElementById('forgot-email')?.value.trim();
@@ -535,6 +676,194 @@ async function sendResetLink() {
     msgBox.className   = `alert ${data.success
         ? 'alert-success' : 'alert-error'}`;
 }
+
+
+// ── PIN Login ────────────────────────────
+const PINLogin = {
+    pin:          '',
+    maxLength:    6,
+    selectedUser: null,
+
+    show() {
+        // Show PIN modal
+        Modal.show(`
+            <div class="modal-overlay">
+                <div class="modal">
+                    <div class="modal-header">
+                        <h3 class="modal-title">
+                            <i class="fas fa-th" style="color:var(--accent);"></i>
+                            Quick Switch
+                        </h3>
+                        <button class="btn-icon" onclick="Modal.close()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="pin-screen">
+                            <div id="pin-user-info"
+                                style="text-align:center;margin-bottom:4px;">
+                                <p style="color:var(--text-muted);font-size:13px;">
+                                    Enter your PIN to switch cashier
+                                </p>
+                            </div>
+
+                            <!-- PIN dots -->
+                            <div class="pin-display" id="pin-display">
+                                ${[1,2,3,4,5,6].map(i => `
+                                    <div class="pin-dot" id="pin-dot-${i}"></div>
+                                `).join('')}
+                            </div>
+
+                            <div id="pin-error"
+                                style="color:var(--danger);font-size:13px;
+                                min-height:20px;text-align:center;">
+                            </div>
+
+                            <!-- Keypad -->
+                            <div class="pin-keypad">
+                                ${[1,2,3,4,5,6,7,8,9].map(n => `
+                                    <button class="pin-key"
+                                        onclick="PINLogin.press('${n}')">
+                                        ${n}
+                                    </button>
+                                `).join('')}
+                                <button class="pin-key pin-zero"
+                                    onclick="PINLogin.press('0')">0</button>
+                                <button class="pin-key pin-delete"
+                                    onclick="PINLogin.delete()">
+                                    <i class="fas fa-backspace"></i>
+                                </button>
+                                <button class="pin-key pin-enter"
+                                    onclick="PINLogin.submit()">
+                                    <i class="fas fa-check"></i> Enter
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer"
+                        style="justify-content:center;">
+                        <button class="btn btn-ghost btn-sm"
+                            onclick="Modal.close()">
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `);
+
+        // Reset state
+        this.pin = '';
+        this.updateDisplay();
+
+        // Keyboard support
+        document.addEventListener('keydown', this.handleKeydown);
+    },
+
+    handleKeydown(e) {
+        if (e.key >= '0' && e.key <= '9') {
+            PINLogin.press(e.key);
+        } else if (e.key === 'Backspace') {
+            PINLogin.delete();
+        } else if (e.key === 'Enter') {
+            PINLogin.submit();
+        }
+    },
+
+    press(digit) {
+        if (this.pin.length >= this.maxLength) return;
+        this.pin += digit;
+        this.updateDisplay();
+
+        // Auto submit when PIN reaches 4 digits
+        // (for 4-digit PINs)
+        if (this.pin.length === 4) {
+            const dots = document.querySelectorAll('.pin-dot');
+            // Check if all 6 dots are used or auto-submit at 4
+            setTimeout(() => {
+                if (this.pin.length === 4) this.submit();
+            }, 300);
+        }
+    },
+
+    delete() {
+        this.pin = this.pin.slice(0, -1);
+        this.updateDisplay();
+        const errEl = document.getElementById('pin-error');
+        if (errEl) errEl.textContent = '';
+    },
+
+    updateDisplay() {
+        for (let i = 1; i <= 6; i++) {
+            const dot = document.getElementById(`pin-dot-${i}`);
+            if (dot) {
+                dot.classList.toggle('filled', i <= this.pin.length);
+            }
+        }
+    },
+
+    async submit() {
+        if (!this.pin) return;
+
+        const errEl = document.getElementById('pin-error');
+        if (errEl) errEl.textContent = '';
+
+        try {
+            const res = await fetch('/public/api/auth/pin-login', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ pin: this.pin }),
+            });
+
+            const data = await res.json();
+
+            if (data.success) {
+                // Switch user
+                localStorage.setItem('pos_token', data.data.token);
+                localStorage.setItem('pos_user',
+                    JSON.stringify(data.data.user));
+                Auth.user = data.data.user;
+
+                // Store sync password hint
+                if (typeof SyncEngine !== 'undefined') {
+                    localStorage.setItem('sync_live_email',
+                        data.data.user.email);
+                }
+
+                Modal.close();
+                document.removeEventListener('keydown', this.handleKeydown);
+
+                // Update UI
+                Auth.populateUserUI();
+                Toast.show(
+                    `Switched to ${data.data.user.name}`,
+                    'success', 3000
+                );
+
+                // Navigate to POS
+                Router.navigate('pos');
+
+            } else {
+                this.pin = '';
+                this.updateDisplay();
+                if (errEl) errEl.textContent = 'Invalid PIN. Try again.';
+
+                // Shake animation
+                const display = document.getElementById('pin-display');
+                if (display) {
+                    display.style.animation = 'shake 0.3s ease';
+                    setTimeout(() => {
+                        display.style.animation = '';
+                    }, 300);
+                }
+            }
+        } catch (e) {
+            if (errEl) errEl.textContent = 'Error. Try again.';
+            this.pin = '';
+            this.updateDisplay();
+        }
+    },
+};
+
 
 // ── Boot ─────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {

@@ -30,7 +30,10 @@ session_start();
         </div>
         <div class="auth-card">
             <div class="auth-logo">
-                <div class="logo-icon"><i class="fas fa-bolt"></i></div>
+                <!-- <div class="logo-icon">
+                    <i class="fas fa-bolt"></i>
+                </div> -->
+                <img src="/public/assets/images/logo.png" alt="Best Cobb Logo" style="width:48px;height:48px;margin-bottom:8px;">
                 <h1>Best Cobb</h1>
                 <p>Point of Sale System</p>
             </div>
@@ -57,10 +60,15 @@ session_start();
                     <span class="btn-text">Sign In</span>
                     <span class="btn-loader hidden"><i class="fas fa-spinner fa-spin"></i></span>
                 </button>
-                <div style="text-align:center;margin-top:16px;">
-                    <a href="#" onclick="showForgotPassword()" 
+                <div style="text-align:center;margin-top:16px;
+                    display:flex;justify-content:space-between;">
+                    <a href="#" onclick="showForgotPassword()"
                         style="color:var(--accent);font-size:13px;font-weight:500;">
-                        Forgot your password?
+                        Forgot password?
+                    </a>
+                    <a href="#" onclick="showPINLogin()"
+                        style="color:var(--text-muted);font-size:13px;font-weight:500;">
+                        <i class="fas fa-th"></i> PIN Login
                     </a>
                 </div>
             </form>
@@ -80,7 +88,10 @@ session_start();
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <div class="sidebar-logo">
-                    <div class="logo-icon sm"><i class="fas fa-bolt"></i></div>
+                    <div class="logo-icon sm">
+                        <!-- <i class="fas fa-bolt"></i> -->
+                        <img src="/public/assets/images/logo.png" alt="Best Cobb Logo" style="width:100%;height:100%;">
+                    </div>
                     <span class="logo-text">Best Cobb</span>
                 </div>
                 <button class="sidebar-toggle" onclick="toggleSidebar()">
@@ -141,17 +152,19 @@ session_start();
                 </div>
             </nav>
 
-            <div class="sidebar-footer">
-                <div class="user-card">
-                    <div class="user-avatar" id="user-avatar">SA</div>
-                    <div class="user-info">
-                        <span class="user-name" id="sidebar-user-name">Super Admin</span>
-                        <span class="user-role" id="sidebar-user-role">superadmin</span>
-                    </div>
-                    <button class="btn-icon" onclick="logout()" title="Logout">
-                        <i class="fas fa-sign-out-alt"></i>
-                    </button>
+            <div class="user-card">
+                <div class="user-avatar" id="user-avatar">SA</div>
+                <div class="user-info">
+                    <span class="user-name" id="sidebar-user-name">Super Admin</span>
+                    <span class="user-role" id="sidebar-user-role">superadmin</span>
                 </div>
+                <button class="btn-icon" onclick="PINLogin.show()"
+                    title="Switch Cashier (PIN)">
+                    <i class="fas fa-exchange-alt"></i>
+                </button>
+                <button class="btn-icon" onclick="logout()" title="Logout">
+                    <i class="fas fa-sign-out-alt"></i>
+                </button>
             </div>
         </aside>
 
