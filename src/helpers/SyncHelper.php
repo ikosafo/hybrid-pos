@@ -335,9 +335,6 @@ class SyncHelper {
         $conn  = getDBConnection();
         $since = $since ?? '1970-01-01 00:00:00';
 
-        // Add unsynced filter to queries
-        $unsyncedFilter = $unsyncedOnly ? 'AND is_synced = 0' : '';
-
         $queries = [
             'orders' => "
                 SELECT o.*,
@@ -355,7 +352,7 @@ class SyncHelper {
                 LEFT JOIN order_items oi ON oi.order_id = o.id
                 LEFT JOIN users u ON u.id = o.cashier_id
                 WHERE (o.updated_at > ? OR o.created_at > ?)
-                {$unsyncedFilter}
+                " . ($unsyncedOnly ? 'AND o.is_synced = 0' : '') . "
                 GROUP BY o.id
                 ORDER BY o.created_at DESC
                 LIMIT {$limit}
@@ -365,35 +362,35 @@ class SyncHelper {
                 FROM products p
                 LEFT JOIN categories c ON c.id = p.category_id
                 WHERE p.updated_at > ?
-                {$unsyncedFilter}
+                " . ($unsyncedOnly ? 'AND p.is_synced = 0' : '') . "
                 ORDER BY p.updated_at DESC
                 LIMIT {$limit}
             ",
             'categories' => "
                 SELECT * FROM categories
                 WHERE (created_at > ? OR updated_at > ?)
-                {$unsyncedFilter}
+                " . ($unsyncedOnly ? 'AND is_synced = 0' : '') . "
                 ORDER BY created_at DESC
                 LIMIT {$limit}
             ",
             'customers' => "
                 SELECT * FROM customers
                 WHERE updated_at > ?
-                {$unsyncedFilter}
+                " . ($unsyncedOnly ? 'AND is_synced = 0' : '') . "
                 ORDER BY updated_at DESC
                 LIMIT {$limit}
             ",
             'expenses' => "
                 SELECT * FROM expenses
                 WHERE created_at > ?
-                {$unsyncedFilter}
+                " . ($unsyncedOnly ? 'AND is_synced = 0' : '') . "
                 ORDER BY created_at DESC
                 LIMIT {$limit}
             ",
             'stock_movements' => "
                 SELECT * FROM stock_movements
                 WHERE created_at > ?
-                {$unsyncedFilter}
+                " . ($unsyncedOnly ? 'AND is_synced = 0' : '') . "
                 ORDER BY created_at DESC
                 LIMIT {$limit}
             ",
@@ -402,6 +399,7 @@ class SyncHelper {
                     is_active, created_at, updated_at
                 FROM users
                 WHERE updated_at > ?
+                " . ($unsyncedOnly ? 'AND is_synced = 0' : '') . "
                 ORDER BY updated_at DESC
                 LIMIT {$limit}
             ",
