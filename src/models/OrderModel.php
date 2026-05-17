@@ -16,9 +16,9 @@ class OrderModel {
             $stmt = $conn->prepare('
                 INSERT INTO orders
                     (uuid, order_number, customer_id, cashier_id, subtotal, discount_amount,
-                     discount_type, tax_amount, total_amount, amount_tendered, change_due,
-                     payment_method, notes, status, is_synced)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "completed", 1)
+                    discount_type, tax_amount, total_amount, amount_tendered, change_due,
+                    payment_method, notes, status, is_synced)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "completed", 0)
             ');
             $stmt->bind_param(
                 'ssiiddsddddss',

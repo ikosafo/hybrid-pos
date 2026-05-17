@@ -9,12 +9,31 @@ const Auth = {
     init() {
         const token = localStorage.getItem('pos_token');
         const user  = localStorage.getItem('pos_user');
+        
+        // Validate both token and user exist AND user is valid JSON
         if (token && user) {
-            this.user = JSON.parse(user);
-            this.showApp();
-        } else {
-            this.showLogin();
+            try {
+                const parsedUser = JSON.parse(user);
+                // Additional validation to ensure parsed user has required properties
+                if (parsedUser && parsedUser.name && parsedUser.role) {
+                    this.user = parsedUser;
+                    this.showApp();
+                    return;
+                } else {
+                    console.warn('Invalid user data structure, clearing...');
+                    localStorage.removeItem('pos_token');
+                    localStorage.removeItem('pos_user');
+                }
+            } catch (e) {
+                // Invalid JSON in localStorage
+                console.warn('Invalid user data in localStorage, clearing...');
+                localStorage.removeItem('pos_token');
+                localStorage.removeItem('pos_user');
+            }
         }
+        
+        // Default: show login screen
+        this.showLogin();
     },
 
 
@@ -49,14 +68,27 @@ const Auth = {
     },
 
     showLogin() {
-        document.getElementById('login-screen').classList.remove('hidden');
-        document.getElementById('main-app').classList.add('hidden');
+        const loginScreen = document.getElementById('login-screen');
+        const mainApp = document.getElementById('main-app');
+        if (loginScreen) loginScreen.classList.remove('hidden');
+        if (mainApp) mainApp.classList.add('hidden');
     },
 
 
     async showApp() {
-        document.getElementById('login-screen').classList.add('hidden');
-        document.getElementById('main-app').classList.remove('hidden');
+        // Guard clause - don't proceed if no valid user
+        if (!this.user || !this.user.name) {
+            console.warn('showApp called without valid user');
+            this.showLogin();
+            return;
+        }
+        
+        const loginScreen = document.getElementById('login-screen');
+        const mainApp = document.getElementById('main-app');
+        
+        if (loginScreen) loginScreen.classList.add('hidden');
+        if (mainApp) mainApp.classList.remove('hidden');
+        
         this.populateUserUI();
         Network.watch();
 
@@ -71,27 +103,40 @@ const Auth = {
         }
 
         // Check DB mode
-        API.checkDBMode();
+        if (typeof API !== 'undefined') {
+            API.checkDBMode();
+        }
 
         // Init sync engine (only runs on hybridpos.local)
         if (typeof SyncEngine !== 'undefined') {
             SyncEngine.init();
         }
 
-        Router.init();
+        if (typeof Router !== 'undefined') {
+            Router.init();
+        }
+        
         setTimeout(() => checkResetRequests(), 2000);
     },
 
 
     populateUserUI() {
         const u = this.user;
-        if (!u) return;
+        if (!u || !u.name) {
+            console.warn('populateUserUI called with no valid user');
+            return;
+        }
 
         const initials = u.name.split(' ')
             .map(n => n[0]).join('').substring(0, 2).toUpperCase();
-        document.getElementById('user-avatar').textContent       = initials;
-        document.getElementById('sidebar-user-name').textContent = u.name;
-        document.getElementById('sidebar-user-role').textContent = u.role;
+            
+        const userAvatar = document.getElementById('user-avatar');
+        const sidebarUserName = document.getElementById('sidebar-user-name');
+        const sidebarUserRole = document.getElementById('sidebar-user-role');
+        
+        if (userAvatar) userAvatar.textContent = initials;
+        if (sidebarUserName) sidebarUserName.textContent = u.name;
+        if (sidebarUserRole) sidebarUserRole.textContent = u.role || '';
 
         // Hide nav items based on permissions
         document.querySelectorAll('.nav-item[data-page]').forEach(item => {
@@ -153,15 +198,24 @@ const Router = {
             `.nav-item[data-page="${page}"]`);
         if (activeLink) activeLink.classList.add('active');
 
-        document.getElementById('page-title').textContent =
-            this.pages[page].title;
-        document.getElementById('sidebar').classList.remove('mobile-open');
+        const pageTitle = document.getElementById('page-title');
+        if (pageTitle) {
+            pageTitle.textContent = this.pages[page].title;
+        }
+        
+        const sidebar = document.getElementById('sidebar');
+        if (sidebar) {
+            sidebar.classList.remove('mobile-open');
+        }
 
         const content = document.getElementById('page-content');
-        content.innerHTML = `
-            <div class="empty-state">
-                <i class="fas fa-spinner fa-spin"></i>
-            </div>`;
+        if (content) {
+            content.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-spinner fa-spin"></i>
+                </div>`;
+        }
+        
         this.pages[page].load();
     }
 };
@@ -177,6 +231,8 @@ const Toast = {
 
     show(message, type = 'info', duration = 3500) {
         const container = document.getElementById('toast-container');
+        if (!container) return;
+        
         const toast     = document.createElement('div');
         toast.className = `toast ${type}`;
         toast.innerHTML = `
@@ -188,7 +244,11 @@ const Toast = {
             </button>
         `;
         container.appendChild(toast);
-        setTimeout(() => toast.remove(), duration);
+        setTimeout(() => {
+            if (toast.parentElement) {
+                toast.remove();
+            }
+        }, duration);
     }
 };
 
@@ -196,6 +256,8 @@ const Toast = {
 const Modal = {
     show(html) {
         const container = document.getElementById('modals-container');
+        if (!container) return;
+        
         container.innerHTML = html;
         container.querySelector('.modal-overlay')
             ?.addEventListener('click', e => {
@@ -204,7 +266,10 @@ const Modal = {
     },
 
     close() {
-        document.getElementById('modals-container').innerHTML = '';
+        const container = document.getElementById('modals-container');
+        if (container) {
+            container.innerHTML = '';
+        }
     },
 
     confirm(message, onConfirm, title = 'Confirm Action') {
@@ -232,16 +297,20 @@ const Modal = {
                 </div>
             </div>
         `);
-        document.getElementById('confirm-btn')
-            .addEventListener('click', () => {
+        const confirmBtn = document.getElementById('confirm-btn');
+        if (confirmBtn) {
+            confirmBtn.addEventListener('click', () => {
                 Modal.close();
                 onConfirm();
             });
+        }
     }
 };
 
 // ── Clock ────────────────────────────────
 const Clock = {
+    timer: null,
+    
     start() {
         const tick = () => {
             const el = document.getElementById('topbar-time');
@@ -252,7 +321,8 @@ const Clock = {
             });
         };
         tick();
-        setInterval(tick, 1000);
+        if (this.timer) clearInterval(this.timer);
+        this.timer = setInterval(tick, 1000);
     }
 };
 
@@ -397,6 +467,8 @@ function debounce(fn, delay = 300) {
 
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
+    if (!sidebar) return;
+    
     if (window.innerWidth <= 768) {
         sidebar.classList.toggle('mobile-open');
     } else {
@@ -408,14 +480,20 @@ function toggleTheme() {
     const html   = document.documentElement;
     const isDark = html.getAttribute('data-theme') === 'dark';
     html.setAttribute('data-theme', isDark ? 'light' : 'dark');
-    document.getElementById('theme-icon').className =
-        isDark ? 'fas fa-sun' : 'fas fa-moon';
+    
+    const themeIcon = document.getElementById('theme-icon');
+    if (themeIcon) {
+        themeIcon.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+    }
+    
     localStorage.setItem('pos_theme', isDark ? 'light' : 'dark');
 }
 
 function togglePassword() {
     const input = document.getElementById('login-password');
     const icon  = document.getElementById('eye-icon');
+    if (!input || !icon) return;
+    
     if (input.type === 'password') {
         input.type     = 'text';
         icon.className = 'fas fa-eye-slash';
@@ -435,18 +513,30 @@ function logout() {
 
 // ── Page Stubs ───────────────────────────
 const OrdersPage = {
-    load: () => OrdersHistoryPage.load()
+    load: () => {
+        if (typeof OrdersHistoryPage !== 'undefined') {
+            OrdersHistoryPage.load();
+        }
+    }
 };
 
 const SettingsPage = {
-    load: () => SettingsPageModule.load()
+    load: () => {
+        if (typeof SettingsPageModule !== 'undefined') {
+            SettingsPageModule.load();
+        }
+    }
 };
 
 // ── Password Reset Requests Check ────────
 async function checkResetRequests() {
     if (!Auth.hasRole('superadmin', 'admin')) return;
+    
+    if (typeof API === 'undefined') return;
+    
     const res = await API.get('/password-resets');
     if (!res?.success) return;
+    
     const pending = res.data.filter(r =>
         !r.used && new Date(r.expires_at) > new Date()
     );
@@ -460,8 +550,11 @@ async function checkResetRequests() {
 
 // ── Forgot Password ──────────────────────
 function showForgotPassword() {
-    document.getElementById('login-form').classList.add('hidden');
-    document.getElementById('login-error').classList.add('hidden');
+    const loginForm = document.getElementById('login-form');
+    const loginError = document.getElementById('login-error');
+    
+    if (loginForm) loginForm.classList.add('hidden');
+    if (loginError) loginError.classList.add('hidden');
 
     const existing = document.getElementById('forgot-form');
     if (existing) existing.remove();
@@ -500,23 +593,35 @@ function showForgotPassword() {
     `;
 
     const card = document.querySelector('.auth-card');
-    card.insertAdjacentHTML('beforeend', forgotHTML);
-    setTimeout(() => document.getElementById('forgot-email')?.focus(), 100);
+    if (card) {
+        card.insertAdjacentHTML('beforeend', forgotHTML);
+        setTimeout(() => {
+            const forgotEmail = document.getElementById('forgot-email');
+            if (forgotEmail) forgotEmail.focus();
+        }, 100);
+    }
 }
 
 function showLoginForm() {
-    document.getElementById('login-form').classList.remove('hidden');
+    const loginForm = document.getElementById('login-form');
+    if (loginForm) loginForm.classList.remove('hidden');
+    
     const forgot = document.getElementById('forgot-form');
     if (forgot) forgot.remove();
+    
     const pin = document.getElementById('pin-login-form');
     if (pin) pin.remove();
+    
     loginPIN = '';
 }
 
 
 function showPINLogin() {
-    document.getElementById('login-form').classList.add('hidden');
-    document.getElementById('login-error').classList.add('hidden');
+    const loginForm = document.getElementById('login-form');
+    const loginError = document.getElementById('login-error');
+    
+    if (loginForm) loginForm.classList.add('hidden');
+    if (loginError) loginError.classList.add('hidden');
 
     const existing = document.getElementById('pin-login-form');
     if (existing) existing.remove();
@@ -577,7 +682,9 @@ function showPINLogin() {
     `;
 
     const card = document.querySelector('.auth-card');
-    card.insertAdjacentHTML('beforeend', pinHTML);
+    if (card) {
+        card.insertAdjacentHTML('beforeend', pinHTML);
+    }
 }
 
 // PIN login state
@@ -665,16 +772,21 @@ async function sendResetLink() {
         return;
     }
 
-    const res = await fetch('/public/api/auth/forgot-password', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ email })
-    });
+    try {
+        const res = await fetch('/public/api/auth/forgot-password', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ email })
+        });
 
-    const data         = await res.json();
-    msgBox.textContent = data.message;
-    msgBox.className   = `alert ${data.success
-        ? 'alert-success' : 'alert-error'}`;
+        const data         = await res.json();
+        msgBox.textContent = data.message;
+        msgBox.className   = `alert ${data.success
+            ? 'alert-success' : 'alert-error'}`;
+    } catch (error) {
+        msgBox.textContent = 'An error occurred. Please try again.';
+        msgBox.className   = 'alert alert-error';
+    }
 }
 
 
@@ -756,7 +868,8 @@ const PINLogin = {
         this.updateDisplay();
 
         // Keyboard support
-        document.addEventListener('keydown', this.handleKeydown);
+        this._handleKeydown = this.handleKeydown.bind(this);
+        document.addEventListener('keydown', this._handleKeydown);
     },
 
     handleKeydown(e) {
@@ -777,8 +890,6 @@ const PINLogin = {
         // Auto submit when PIN reaches 4 digits
         // (for 4-digit PINs)
         if (this.pin.length === 4) {
-            const dots = document.querySelectorAll('.pin-dot');
-            // Check if all 6 dots are used or auto-submit at 4
             setTimeout(() => {
                 if (this.pin.length === 4) this.submit();
             }, 300);
@@ -830,7 +941,9 @@ const PINLogin = {
                 }
 
                 Modal.close();
-                document.removeEventListener('keydown', this.handleKeydown);
+                if (this._handleKeydown) {
+                    document.removeEventListener('keydown', this._handleKeydown);
+                }
 
                 // Update UI
                 Auth.populateUserUI();
@@ -871,37 +984,46 @@ document.addEventListener('DOMContentLoaded', () => {
     const savedTheme = localStorage.getItem('pos_theme') || 'dark';
     document.documentElement.setAttribute('data-theme', savedTheme);
     const themeIcon = document.getElementById('theme-icon');
-    if (themeIcon) themeIcon.className =
-        savedTheme === 'dark' ? 'fas fa-moon' : 'fas fa-sun';
+    if (themeIcon) {
+        themeIcon.className = savedTheme === 'dark' ? 'fas fa-moon' : 'fas fa-sun';
+    }
 
     // Login form
-    document.getElementById('login-form')
-        .addEventListener('submit', async e => {
+    const loginForm = document.getElementById('login-form');
+    if (loginForm) {
+        loginForm.addEventListener('submit', async e => {
             e.preventDefault();
             const btn     = document.getElementById('login-btn');
+            if (!btn) return;
+            
             const btnText = btn.querySelector('.btn-text');
             const loader  = btn.querySelector('.btn-loader');
             const errBox  = document.getElementById('login-error');
 
-            btnText.classList.add('hidden');
-            loader.classList.remove('hidden');
+            if (btnText) btnText.classList.add('hidden');
+            if (loader) loader.classList.remove('hidden');
             btn.disabled = true;
-            errBox.classList.add('hidden');
+            if (errBox) errBox.classList.add('hidden');
 
             try {
-                await Auth.login(
-                    document.getElementById('login-email').value,
-                    document.getElementById('login-password').value
-                );
+                const emailInput = document.getElementById('login-email');
+                const passwordInput = document.getElementById('login-password');
+                
+                if (emailInput && passwordInput) {
+                    await Auth.login(emailInput.value, passwordInput.value);
+                }
             } catch (err) {
-                errBox.textContent = err.message;
-                errBox.classList.remove('hidden');
+                if (errBox) {
+                    errBox.textContent = err.message;
+                    errBox.classList.remove('hidden');
+                }
             } finally {
-                btnText.classList.remove('hidden');
-                loader.classList.add('hidden');
+                if (btnText) btnText.classList.remove('hidden');
+                if (loader) loader.classList.add('hidden');
                 btn.disabled = false;
             }
         });
+    }
 
     Auth.init();
 });

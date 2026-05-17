@@ -48,10 +48,11 @@ addRoute('GET', '/api/sync/pull', function () {
     $entityType = $_GET['entity_type'] ?? null;
     $since      = $_GET['since']       ?? null; // timestamp
     $limit      = (int)($_GET['limit'] ?? 500);
+    $unsyncedOnly= ($_GET['unsynced_only'] ?? 'false') === 'true';
 
     if (!$entityType) Response::error('entity_type is required', 422);
 
-    $records = SyncHelper::getUpdatedSince($entityType, $since, $limit);
+    $records = SyncHelper::getUpdatedSince($entityType, $since, $limit, $unsyncedOnly);
 
     Response::success([
         'entity_type' => $entityType,

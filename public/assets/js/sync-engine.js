@@ -179,14 +179,14 @@ const SyncEngine = {
 
     // ── Push single entity to live ───────────
     async pushEntity(entityType, liveToken) {
-        // Get unsynced records from local
+        // Get ONLY unsynced records from local
         const localRes = await API.get(
-            `/sync/pull?entity_type=${entityType}&since=1970-01-01`
+            `/sync/pull?entity_type=${entityType}&since=1970-01-01&unsynced_only=true`
         );
 
         if (!localRes?.success || !localRes.data.records.length) return;
 
-        const records = localRes.data.records.filter(r => !r.is_synced);
+        const records = localRes.data.records;
         if (!records.length) return;
 
         console.log(`[SyncEngine] Pushing ${records.length} ${entityType} to live`);

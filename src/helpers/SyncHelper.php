@@ -329,26 +329,33 @@ class SyncHelper {
     public static function getUpdatedSince(
         string $entityType,
         ?string $since,
-        int $limit = 500
+        int $limit = 500,
+        bool $unsyncedOnly = false
     ): array {
         $conn  = getDBConnection();
         $since = $since ?? '1970-01-01 00:00:00';
 
+        // Add unsynced filter to queries
+        $unsyncedFilter = $unsyncedOnly ? 'AND is_synced = 0' : '';
+
         $queries = [
             'orders' => "
                 SELECT o.*,
-                       GROUP_CONCAT(
-                           JSON_OBJECT(
-                               'product_id',   oi.product_id,
-                               'product_name', oi.product_name,
-                               'unit_price',   oi.unit_price,
-                               'quantity',     oi.quantity,
-                               'total',        oi.total
-                           )
-                       ) AS items_json
+                    u.uuid AS cashier_uuid,
+                    GROUP_CONCAT(
+                        JSON_OBJECT(
+                            'product_id',   oi.product_id,
+                            'product_name', oi.product_name,
+                            'unit_price',   oi.unit_price,
+                            'quantity',     oi.quantity,
+                            'total',        oi.total
+                        )
+                    ) AS items_json
                 FROM orders o
                 LEFT JOIN order_items oi ON oi.order_id = o.id
-                WHERE o.updated_at > ? OR o.created_at > ?
+                LEFT JOIN users u ON u.id = o.cashier_id
+                WHERE (o.updated_at > ? OR o.created_at > ?)
+                {$unsyncedFilter}
                 GROUP BY o.id
                 ORDER BY o.created_at DESC
                 LIMIT {$limit}
@@ -358,30 +365,35 @@ class SyncHelper {
                 FROM products p
                 LEFT JOIN categories c ON c.id = p.category_id
                 WHERE p.updated_at > ?
+                {$unsyncedFilter}
                 ORDER BY p.updated_at DESC
                 LIMIT {$limit}
             ",
             'categories' => "
                 SELECT * FROM categories
-                WHERE created_at > ? OR updated_at > ?
+                WHERE (created_at > ? OR updated_at > ?)
+                {$unsyncedFilter}
                 ORDER BY created_at DESC
                 LIMIT {$limit}
             ",
             'customers' => "
                 SELECT * FROM customers
                 WHERE updated_at > ?
+                {$unsyncedFilter}
                 ORDER BY updated_at DESC
                 LIMIT {$limit}
             ",
             'expenses' => "
                 SELECT * FROM expenses
                 WHERE created_at > ?
+                {$unsyncedFilter}
                 ORDER BY created_at DESC
                 LIMIT {$limit}
             ",
             'stock_movements' => "
                 SELECT * FROM stock_movements
                 WHERE created_at > ?
+                {$unsyncedFilter}
                 ORDER BY created_at DESC
                 LIMIT {$limit}
             ",
@@ -413,7 +425,9 @@ class SyncHelper {
         if ($entityType === 'orders') {
             foreach ($results as &$order) {
                 if (!empty($order['items_json'])) {
-                    $decoded        = json_decode('[' . $order['items_json'] . ']', true);
+                    $decoded        = json_decode(
+                        '[' . $order['items_json'] . ']', true
+                    );
                     $order['items'] = $decoded ?? [];
                 } else {
                     $order['items'] = [];
