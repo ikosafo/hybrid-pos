@@ -17,6 +17,7 @@ if (str_contains($host, 'bestcobb.shop')) {
     define('DB_NAME', 'pos_system');
     define('DB_MODE', 'local');
     define('IS_LIVE_SERVER', false);
+    define('LOCAL_SERVER_URL', 'http://hybridpos.local/public/api');
 }
 
 function getDBConnection(): mysqli {

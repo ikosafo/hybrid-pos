@@ -27,7 +27,7 @@ class CustomerModel {
     public static function create(array $d): int {
         $conn = getDBConnection();
         $uuid = Uuid::generate();
-        $stmt = $conn->prepare('INSERT INTO customers (uuid, name, phone, email, address) VALUES (?, ?, ?, ?, ?)');
+        $stmt = $conn->prepare('INSERT INTO customers (uuid, name, phone, email, address, is_synced) VALUES (?, ?, ?, ?, ?, 0)');
         $stmt->bind_param('sssss', $uuid, $d['name'], $d['phone'], $d['email'], $d['address']);
         $stmt->execute();
         $id = $conn->insert_id;
@@ -37,7 +37,7 @@ class CustomerModel {
 
     public static function update(int $id, array $d): bool {
         $conn = getDBConnection();
-        $stmt = $conn->prepare('UPDATE customers SET name=?, phone=?, email=?, address=? WHERE id=?');
+        $stmt = $conn->prepare('UPDATE customers SET name=?, phone=?, email=?, address=?, is_synced=0 WHERE id=?');
         $stmt->bind_param('ssssi', $d['name'], $d['phone'], $d['email'], $d['address'], $id);
         $stmt->execute();
         $stmt->close();
@@ -46,7 +46,7 @@ class CustomerModel {
 
     public static function updateSpend(int $id, float $amount): void {
         $conn = getDBConnection();
-        $stmt = $conn->prepare('UPDATE customers SET total_spent = total_spent + ? WHERE id = ?');
+        $stmt = $conn->prepare('UPDATE customers SET total_spent = total_spent + ?, is_synced = 0 WHERE id = ?');
         $stmt->bind_param('di', $amount, $id);
         $stmt->execute();
         $stmt->close();

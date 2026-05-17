@@ -63,8 +63,8 @@ class ProductModel {
         $uuid = Uuid::generate();
         $stmt = $conn->prepare('
             INSERT INTO products
-                (uuid, category_id, name, sku, barcode, description, price, cost_price, stock_qty, low_stock_alert, unit, track_stock)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (uuid, category_id, name, sku, barcode, description, price, cost_price, stock_qty, low_stock_alert, unit, track_stock, is_synced)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
         ');
         $stmt->bind_param(
             'sissssddisis',
@@ -94,7 +94,7 @@ class ProductModel {
             UPDATE products SET
                 category_id=?, name=?, sku=?, barcode=?, description=?,
                 price=?, cost_price=?, stock_qty=?, low_stock_alert=?,
-                unit=?, track_stock=?
+                unit=?, track_stock=?, is_synced=0
             WHERE id=?
         ');
 
@@ -131,7 +131,7 @@ class ProductModel {
 
     public static function updateStock(int $id, float $qty): bool {
         $conn = getDBConnection();
-        $stmt = $conn->prepare('UPDATE products SET stock_qty = ? WHERE id = ?');
+        $stmt = $conn->prepare('UPDATE products SET stock_qty = ?, is_synced = 0 WHERE id = ?');
         $stmt->bind_param('di', $qty, $id);
         $stmt->execute();
         $stmt->close();
@@ -140,7 +140,7 @@ class ProductModel {
 
     public static function delete(int $id): bool {
         $conn = getDBConnection();
-        $stmt = $conn->prepare('UPDATE products SET is_active = 0 WHERE id = ?');
+        $stmt = $conn->prepare('UPDATE products SET is_active = 0, is_synced = 0 WHERE id = ?');
         $stmt->bind_param('i', $id);
         $stmt->execute();
         $affected = $stmt->affected_rows;

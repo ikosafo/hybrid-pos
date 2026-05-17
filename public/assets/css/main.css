@@ -914,7 +914,7 @@ select:focus {
     transition: var(--transition);
     text-align: center;
     position: relative;
-    overflow: hidden;
+    /* overflow: hidden; */
 }
 
 .product-card::before {

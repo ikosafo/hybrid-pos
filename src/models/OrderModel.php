@@ -142,7 +142,7 @@ class OrderModel {
 
     public static function void(int $id): void {
         $conn = getDBConnection();
-        $stmt = $conn->prepare('UPDATE orders SET status = "voided" WHERE id = ?');
+        $stmt = $conn->prepare('UPDATE orders SET status = "voided", is_synced = 0 WHERE id = ?');
         $stmt->bind_param('i', $id);
         $stmt->execute();
         $stmt->close();

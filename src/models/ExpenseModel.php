@@ -61,9 +61,7 @@ class ExpenseModel {
         $conn = getDBConnection();
         $uuid = Uuid::generate();
         $stmt = $conn->prepare('
-            INSERT INTO expenses
-                (uuid, category, description, amount, notes, recorded_by, expense_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO expenses (uuid, category, description, amount, notes, recorded_by, expense_date, is_synced) VALUES (?, ?, ?, ?, ?, ?, ?, 0)
         ');
         $stmt->bind_param('sssdsss',
             $uuid, $d['category'], $d['description'],
@@ -80,7 +78,7 @@ class ExpenseModel {
         $conn = getDBConnection();
         $stmt = $conn->prepare('
             UPDATE expenses SET
-                category=?, description=?, amount=?, notes=?, expense_date=?
+                category=?, description=?, amount=?, notes=?, expense_date=?, is_synced=0
             WHERE id=?
         ');
         $stmt->bind_param('ssdssi',

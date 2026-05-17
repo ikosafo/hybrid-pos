@@ -50,7 +50,7 @@ class StockModel {
         $after  = $before + $qty;
 
         // Update stock
-        $ustmt = $conn->prepare('UPDATE products SET stock_qty = ? WHERE id = ?');
+        $ustmt = $conn->prepare('UPDATE products SET is_synced = 0, stock_qty = ? WHERE id = ?');
         $ustmt->bind_param('di', $after, $productId);
         $ustmt->execute();
         $ustmt->close();
@@ -81,7 +81,7 @@ class StockModel {
         $before = (float)$product['stock_qty'];
         $change = $newQty - $before;
 
-        $ustmt = $conn->prepare('UPDATE products SET stock_qty = ? WHERE id = ?');
+        $ustmt = $conn->prepare('UPDATE products SET is_synced = 0, stock_qty = ? WHERE id = ?');
         $ustmt->bind_param('di', $newQty, $productId);
         $ustmt->execute();
         $ustmt->close();
@@ -112,7 +112,7 @@ class StockModel {
         $after  = max(0, $before - $qty);
         $change = -$qty;
 
-        $ustmt = $conn->prepare('UPDATE products SET stock_qty = ? WHERE id = ?');
+        $ustmt = $conn->prepare('UPDATE products SET is_synced = 0, stock_qty = ? WHERE id = ?');
         $ustmt->bind_param('di', $after, $productId);
         $ustmt->execute();
         $ustmt->close();
@@ -134,9 +134,7 @@ class StockModel {
     ): void {
         $conn  = getDBConnection();
         $stmt  = $conn->prepare('
-            INSERT INTO stock_movements
-                (product_id, user_id, type, qty_before, qty_change, qty_after, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO stock_movements (product_id, user_id, type, qty_before, qty_change, qty_after, notes, is_synced) VALUES (?, ?, ?, ?, ?, ?, ?, 0)
         ');
         $stmt->bind_param('iisddds',
             $productId, $userId, $type,

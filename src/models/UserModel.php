@@ -34,8 +34,7 @@ class UserModel {
         $uuid = Uuid::generate();
         $hash = password_hash($data['password'], PASSWORD_BCRYPT, ['cost' => 12]);
         $stmt = $conn->prepare('
-            INSERT INTO users (uuid, name, email, password_hash, role, pin)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO users (uuid, name, email, password_hash, role, pin, is_synced) VALUES (?, ?, ?, ?, ?, ?, 0)
         ');
         $stmt->bind_param('ssssss',
             $uuid, $data['name'], $data['email'],
@@ -50,7 +49,7 @@ class UserModel {
     public static function update(int $id, array $data): void {
         $conn = getDBConnection();
         $stmt = $conn->prepare('
-            UPDATE users SET name=?, email=?, role=?, pin=?, is_active=?
+            UPDATE users SET name=?, email=?, role=?, pin=?, is_active=?, is_synced=0
             WHERE id=?
         ');
         $stmt->bind_param('ssssii',
@@ -65,7 +64,7 @@ class UserModel {
     public static function updatePassword(int $id, string $password): void {
         $conn = getDBConnection();
         $hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
-        $stmt = $conn->prepare('UPDATE users SET password_hash = ? WHERE id = ?');
+        $stmt = $conn->prepare('UPDATE users SET password_hash = ?, is_synced = 0 WHERE id = ?');
         $stmt->bind_param('si', $hash, $id);
         $stmt->execute();
         $stmt->close();
@@ -73,7 +72,7 @@ class UserModel {
 
     public static function setActive(int $id, int $status): void {
         $conn = getDBConnection();
-        $stmt = $conn->prepare('UPDATE users SET is_active = ? WHERE id = ?');
+        $stmt = $conn->prepare('UPDATE users SET is_active = ?, is_synced = 0 WHERE id = ?');
         $stmt->bind_param('ii', $status, $id);
         $stmt->execute();
         $stmt->close();
