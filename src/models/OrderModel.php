@@ -59,11 +59,13 @@ class OrderModel {
                 $before  = $product['stock_qty'] + $item['quantity'];
                 $after   = $product['stock_qty'];
                 $change  = -$item['quantity'];
-                $mstmt   = $conn->prepare('
-                    INSERT INTO stock_movements (product_id, user_id, type, qty_before, qty_change, qty_after, reference)
-                    VALUES (?, ?, "sale", ?, ?, ?, ?)
+                $stockUuid = Uuid::generate();
+                $mstmt = $conn->prepare('
+                    INSERT INTO stock_movements (uuid, product_id, user_id, type, qty_before, qty_change, qty_after, reference)
+                    VALUES (?, ?, ?, "sale", ?, ?, ?, ?)
                 ');
-                $mstmt->bind_param('iiddds',
+                $mstmt->bind_param('siiddds',
+                    $stockUuid,
                     $item['product_id'], $data['cashier_id'],
                     $before, $change, $after, $orderNumber
                 );
