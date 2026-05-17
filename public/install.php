@@ -703,7 +703,7 @@ if ($step === 'database' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POS
         setProgress(55);
 
         // Step 5 — Entities
-        const entities = ['categories', 'products', 'customers', 'orders', 'expenses'];
+        const entities = ['categories', 'products', 'customers', 'orders', 'expenses', 'stock_movements'];
         let prog = 55;
         const step = (90 - 55) / entities.length;
 

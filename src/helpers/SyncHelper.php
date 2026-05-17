@@ -42,51 +42,112 @@ class SyncHelper {
     }
 
     private static function upsertOrder(mysqli $conn, array $r): bool {
-        $stmt = $conn->prepare('
-            INSERT INTO orders (
-                uuid, order_number, customer_id, cashier_id,
-                status, subtotal, discount_amount, discount_type,
-                tax_amount, total_amount, amount_tendered, change_due,
-                payment_method, notes, is_synced, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-            ON DUPLICATE KEY UPDATE
-                status    = VALUES(status),
-                is_synced = 1,
-                synced_at = NOW()
-        ');
+        $conn->begin_transaction();
+        
+        try {
+            // Check if order already exists
+            $checkStmt = $conn->prepare('SELECT id, is_synced FROM orders WHERE uuid = ?');
+            $checkStmt->bind_param('s', $r['uuid']);
+            $checkStmt->execute();
+            $existing = $checkStmt->get_result()->fetch_assoc();
+            $checkStmt->close();
+            
+            // Determine sync status:
+            // - If order is coming FROM the other server (sync), mark as synced
+            // - If order already exists, preserve its sync status
+            // - This works symmetrically on both local and live
+            if ($existing) {
+                // Order exists - keep current sync status
+                $isSynced = $existing['is_synced'];
+            } else {
+                // New order being received from sync - mark as synced
+                // (it's already on the other server)
+                $isSynced = 1;
+            }
+            
+            $stmt = $conn->prepare('
+                INSERT INTO orders (
+                    uuid, order_number, customer_id, cashier_id,
+                    status, subtotal, discount_amount, discount_type,
+                    tax_amount, total_amount, amount_tendered, change_due,
+                    payment_method, notes, is_synced, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    status    = VALUES(status),
+                    is_synced = VALUES(is_synced),
+                    synced_at = NOW()
+            ');
 
-        $uuid           = $r['uuid'];
-        $orderNumber    = $r['order_number'];
-        $customerId     = $r['customer_id'] ? (int)$r['customer_id'] : null;
-        $cashierId      = (int)$r['cashier_id'];
-        $status         = $r['status'];
-        $subtotal       = (float)$r['subtotal'];
-        $discountAmount = (float)$r['discount_amount'];
-        $discountType   = $r['discount_type'];
-        $taxAmount      = (float)$r['tax_amount'];
-        $totalAmount    = (float)$r['total_amount'];
-        $amtTendered    = (float)$r['amount_tendered'];
-        $changeDue      = (float)$r['change_due'];
-        $paymentMethod  = $r['payment_method'];
-        $notes          = $r['notes'];
-        $createdAt      = $r['created_at'];
+            $uuid           = $r['uuid'];
+            $orderNumber    = $r['order_number'];
+            $customerId     = $r['customer_id'] ? (int)$r['customer_id'] : null;
+            $cashierId      = (int)$r['cashier_id'];
+            $status         = $r['status'];
+            $subtotal       = (float)$r['subtotal'];
+            $discountAmount = (float)$r['discount_amount'];
+            $discountType   = $r['discount_type'];
+            $taxAmount      = (float)$r['tax_amount'];
+            $totalAmount    = (float)$r['total_amount'];
+            $amtTendered    = (float)$r['amount_tendered'];
+            $changeDue      = (float)$r['change_due'];
+            $paymentMethod  = $r['payment_method'];
+            $notes          = $r['notes'];
+            $createdAt      = $r['created_at'];
 
-        $stmt->bind_param(
-            'ssiisddsddddsss',
-            $uuid, $orderNumber,
-            $customerId, $cashierId,
-            $status,
-            $subtotal, $discountAmount, $discountType,
-            $taxAmount, $totalAmount,
-            $amtTendered, $changeDue,
-            $paymentMethod, $notes,
-            $createdAt
-        );
+            $stmt->bind_param(
+                'ssiisddsddddsssi',
+                $uuid, $orderNumber,
+                $customerId, $cashierId,
+                $status,
+                $subtotal, $discountAmount, $discountType,
+                $taxAmount, $totalAmount,
+                $amtTendered, $changeDue,
+                $paymentMethod, $notes,
+                $isSynced,  // ← From sync = 1, keep existing status
+                $createdAt
+            );
 
-        $stmt->execute();
-        $affected = $stmt->affected_rows;
-        $stmt->close();
-        return $affected >= 0;
+            $stmt->execute();
+            $orderId = $conn->insert_id ?: ($existing['id'] ?? 0);
+            $stmt->close();
+
+            // Sync order items (only if provided)
+            if (!empty($r['items']) && is_array($r['items']) && $orderId > 0) {
+                // Delete existing items to prevent duplicates
+                $delStmt = $conn->prepare('DELETE FROM order_items WHERE order_id = ?');
+                $delStmt->bind_param('i', $orderId);
+                $delStmt->execute();
+                $delStmt->close();
+
+                $itemStmt = $conn->prepare('
+                    INSERT INTO order_items (
+                        order_id, product_id, product_name,
+                        unit_price, quantity, total
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                ');
+
+                foreach ($r['items'] as $item) {
+                    $itemStmt->bind_param(
+                        'iisddd',
+                        $orderId,
+                        $item['product_id'],
+                        $item['product_name'],
+                        $item['unit_price'],
+                        $item['quantity'],
+                        $item['total']
+                    );
+                    $itemStmt->execute();
+                }
+                $itemStmt->close();
+            }
+
+            $conn->commit();
+            return true;
+        } catch (Exception $e) {
+            $conn->rollback();
+            error_log('[SyncHelper] upsertOrder failed: ' . $e->getMessage());
+            return false;
+        }
     }
 
     private static function upsertOrderItem(mysqli $conn, array $r): bool {
@@ -121,12 +182,19 @@ class SyncHelper {
     }
 
     private static function upsertProduct(mysqli $conn, array $r): bool {
+        // Check if exists
+        $checkStmt = $conn->prepare('SELECT id, is_synced FROM products WHERE uuid = ?');
+        $checkStmt->bind_param('s', $r['uuid']);
+        $checkStmt->execute();
+        $existing = $checkStmt->get_result()->fetch_assoc();
+        $checkStmt->close();
+        
+        $isSynced = $existing ? $existing['is_synced'] : 1; // New from sync = synced
+        
         // Resolve category_id from category_uuid
         $categoryId = null;
         if (!empty($r['category_uuid'])) {
-            $cstmt = $conn->prepare(
-                'SELECT id FROM categories WHERE uuid = ? LIMIT 1'
-            );
+            $cstmt = $conn->prepare('SELECT id FROM categories WHERE uuid = ? LIMIT 1');
             $cstmt->bind_param('s', $r['category_uuid']);
             $cstmt->execute();
             $cat = $cstmt->get_result()->fetch_assoc();
@@ -142,7 +210,7 @@ class SyncHelper {
                 description, price, cost_price, stock_qty,
                 low_stock_alert, unit, is_active, track_stock,
                 is_synced, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 name            = VALUES(name),
                 category_id     = VALUES(category_id),
@@ -153,7 +221,7 @@ class SyncHelper {
                 low_stock_alert = VALUES(low_stock_alert),
                 unit            = VALUES(unit),
                 is_active       = VALUES(is_active),
-                is_synced       = 1,
+                is_synced       = VALUES(is_synced),
                 synced_at       = NOW(),
                 updated_at      = IF(VALUES(updated_at) > updated_at,
                                     VALUES(updated_at), updated_at)
@@ -174,12 +242,13 @@ class SyncHelper {
         $updatedAt     = $r['updated_at'];
 
         $stmt->bind_param(
-            'sissssdddissis',
+            'sissssdddissii',
             $uuid, $categoryId, $name,
             $sku, $barcode, $description,
             $price, $costPrice, $stockQty,
             $lowStockAlert, $unit,
             $isActive, $trackStock,
+            $isSynced,  // ← Dynamic
             $updatedAt
         );
 
@@ -294,15 +363,16 @@ class SyncHelper {
     private static function upsertStockMovement(mysqli $conn, array $r): bool {
         $stmt = $conn->prepare('
             INSERT INTO stock_movements (
-                product_id, user_id, type,
+                uuid, product_id, user_id, type,
                 qty_before, qty_change, qty_after,
                 reference, notes, is_synced, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
             ON DUPLICATE KEY UPDATE
                 is_synced = 1,
                 synced_at = NOW()
         ');
 
+        $uuid      = $r['uuid'] ?? null;
         $productId = (int)$r['product_id'];
         $userId    = (int)$r['user_id'];
         $type      = $r['type'];
@@ -314,8 +384,8 @@ class SyncHelper {
         $createdAt = $r['created_at'];
 
         $stmt->bind_param(
-            'iisdddsss',
-            $productId, $userId, $type,
+            'siisdddsss',
+            $uuid, $productId, $userId, $type,
             $qtyBefore, $qtyChange, $qtyAfter,
             $reference, $notes, $createdAt
         );
@@ -495,5 +565,64 @@ class SyncHelper {
         $affected = $stmt->affected_rows;
         $stmt->close();
         return $affected >= 0;
+    }
+
+
+    public static function getRecordsByUuids(string $entityType, array $uuids): array {
+        $conn  = getDBConnection();
+        $table = self::$syncTables[$entityType] ?? null;
+        
+        if (!$table || empty($uuids)) return [];
+        
+        $placeholders = implode(',', array_fill(0, count($uuids), '?'));
+        $types        = str_repeat('s', count($uuids));
+        
+        $query = match($entityType) {
+            'orders' => "
+                SELECT o.*,
+                    u.uuid AS cashier_uuid,
+                    GROUP_CONCAT(
+                        JSON_OBJECT(
+                            'product_id',   oi.product_id,
+                            'product_name', oi.product_name,
+                            'unit_price',   oi.unit_price,
+                            'quantity',     oi.quantity,
+                            'total',        oi.total
+                        )
+                    ) AS items_json
+                FROM orders o
+                LEFT JOIN order_items oi ON oi.order_id = o.id
+                LEFT JOIN users u ON u.id = o.cashier_id
+                WHERE o.uuid IN ({$placeholders})
+                GROUP BY o.id
+            ",
+            'products' => "
+                SELECT p.*, c.uuid AS category_uuid
+                FROM products p
+                LEFT JOIN categories c ON c.id = p.category_id
+                WHERE p.uuid IN ({$placeholders})
+            ",
+            default => "SELECT * FROM {$table} WHERE uuid IN ({$placeholders})"
+        };
+        
+        $stmt = $conn->prepare($query);
+        $stmt->bind_param($types, ...$uuids);
+        $stmt->execute();
+        $results = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+        $stmt->close();
+        
+        // Process orders items_json
+        if ($entityType === 'orders') {
+            foreach ($results as &$order) {
+                if (!empty($order['items_json'])) {
+                    $order['items'] = json_decode('[' . $order['items_json'] . ']', true) ?? [];
+                } else {
+                    $order['items'] = [];
+                }
+                unset($order['items_json']);
+            }
+        }
+        
+        return $results;
     }
 }

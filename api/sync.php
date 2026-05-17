@@ -146,3 +146,45 @@ addRoute('POST', '/api/sync/delete', function () {
 
     Response::success(['affected' => $affected], 'Deletion synced');
 });
+
+
+
+// POST /api/sync/receive — Local receives pushed data from Live
+addRoute('POST', '/api/sync/receive', function () {
+    // Verify sync secret key
+    $headers = getallheaders();
+    $syncKey = $headers['X-Sync-Key'] ?? '';
+    
+    if ($syncKey !== SYNC_API_KEY) {
+        Response::error('Unauthorized', 401);
+    }
+    
+    $body = json_decode(file_get_contents('php://input'), true);
+    
+    if (empty($body['entity_type']) || empty($body['uuids'])) {
+        Response::error('entity_type and uuids required', 422);
+    }
+    
+    $entityType = $body['entity_type'];
+    $uuids      = $body['uuids'];
+    
+    // Pull specific records from live server and upsert locally
+    $records = SyncHelper::getRecordsByUuids($entityType, $uuids);
+    
+    if (empty($records)) {
+        Response::success(['synced' => 0], 'No records found on live');
+        return;
+    }
+    
+    // Insert/update locally
+    $synced = 0;
+    foreach ($records as $record) {
+        $result = SyncHelper::upsert($entityType, $record);
+        if ($result) $synced++;
+    }
+    
+    Response::success([
+        'synced' => $synced,
+        'total'  => count($records),
+    ], "Received and synced {$synced} records");
+});

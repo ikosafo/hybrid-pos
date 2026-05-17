@@ -231,6 +231,7 @@ const SyncEngine = {
             'customers',
             'orders',
             'expenses',
+            'stock_movements',
         ];
 
         const since = forceSince || (this.lastSyncTime

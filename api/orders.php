@@ -24,6 +24,13 @@ addRoute('POST', '/api/orders', function () {
     ];
 
     $order = OrderModel::create($orderData, $body['items']);
+    
+    // 🔥 If on live server, push to local immediately
+    if (IS_LIVE_SERVER && !empty($order['uuid'])) {
+        require_once __DIR__ . '/../src/helpers/LiveSyncHelper.php';
+        LiveSyncHelper::pushToLocal('orders', [$order['uuid']]);
+    }
+    
     Response::success($order, 'Order placed successfully', 201);
 });
 
