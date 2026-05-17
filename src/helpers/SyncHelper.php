@@ -80,7 +80,7 @@ class SyncHelper {
 
             $uuid           = $r['uuid'];
             $orderNumber    = $r['order_number'];
-            $customerId     = $r['customer_id'] ? (int)$r['customer_id'] : null;
+            $customerId = $r['customer_id'] ? (int)$r['customer_id'] : 0;
             $cashierId      = (int)$r['cashier_id'];
             $status         = $r['status'];
             $subtotal       = (float)$r['subtotal'];
@@ -91,7 +91,7 @@ class SyncHelper {
             $amtTendered    = (float)$r['amount_tendered'];
             $changeDue      = (float)$r['change_due'];
             $paymentMethod  = $r['payment_method'];
-            $notes          = $r['notes'];
+            $notes          = $r['notes'] ?? '';
             $createdAt      = $r['created_at'];
 
             $stmt->bind_param(
