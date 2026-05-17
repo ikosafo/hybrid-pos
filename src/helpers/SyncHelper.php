@@ -95,7 +95,7 @@ class SyncHelper {
             $createdAt      = $r['created_at'];
 
             $stmt->bind_param(
-                'ssiisddsddddsssi',
+                'ssiisddsddddsssis',
                 $uuid, $orderNumber,
                 $customerId, $cashierId,
                 $status,
