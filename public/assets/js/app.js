@@ -40,6 +40,11 @@ const Auth = {
     async login(email, password) {
         const res = await API.post('/auth/login', { email, password });
         if (res && res.success) {
+            // Fix null name - use email or role as fallback
+            if (!res.data.user.name) {
+                res.data.user.name = res.data.user.email.split('@')[0] || 'User';
+            }
+            
             localStorage.setItem('pos_token', res.data.token);
             localStorage.setItem('pos_user', JSON.stringify(res.data.user));
             this.user = res.data.user;
@@ -122,9 +127,14 @@ const Auth = {
 
     populateUserUI() {
         const u = this.user;
-        if (!u || !u.name) {
+        if (!u) {
             console.warn('populateUserUI called with no valid user');
             return;
+        }
+        
+        // Fix null name
+        if (!u.name) {
+            u.name = (u.email ? u.email.split('@')[0] : 'User');
         }
 
         const initials = u.name.split(' ')
@@ -148,6 +158,7 @@ const Auth = {
             }
         });
     },
+
 
     hasRole(...roles) {
         return roles.includes(this.user?.role);
