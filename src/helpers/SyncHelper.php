@@ -9,6 +9,7 @@ class SyncHelper {
         'expenses'        => 'expenses',
         'stock_movements' => 'stock_movements',
         'order_items'     => 'order_items',
+        'users'           => 'users',
     ];
 
     public static function upsert(string $entityType, array $record): bool {
@@ -23,6 +24,8 @@ class SyncHelper {
                 return self::upsertOrder($conn, $record);
             case 'order_items':
                 return self::upsertOrderItem($conn, $record);
+            case 'users':
+                return self::upsertUser($conn, $record);
             case 'products':
                 return self::upsertProduct($conn, $record);
             case 'categories':
@@ -382,6 +385,14 @@ class SyncHelper {
                 ORDER BY created_at DESC
                 LIMIT {$limit}
             ",
+            'users' => "
+                SELECT id, uuid, name, email, role, pin,
+                    is_active, created_at, updated_at
+                FROM users
+                WHERE updated_at > ?
+                ORDER BY updated_at DESC
+                LIMIT {$limit}
+            ",
         ];
 
         if (!isset($queries[$entityType])) return [];
@@ -432,5 +443,37 @@ class SyncHelper {
         $affected = $stmt->affected_rows;
         $stmt->close();
         return $affected;
+    }
+
+
+    private static function upsertUser(mysqli $conn, array $r): bool {
+        $stmt = $conn->prepare('
+            INSERT INTO users (uuid, name, email, role, pin, is_active)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                name      = VALUES(name),
+                role      = VALUES(role),
+                pin       = VALUES(pin),
+                is_active = VALUES(is_active),
+                updated_at = NOW()
+        ');
+
+        $uuid     = $r['uuid'];
+        $name     = $r['name'];
+        $email    = $r['email'];
+        $role     = $r['role'];
+        $pin      = $r['pin'];
+        $isActive = (int)$r['is_active'];
+
+        $stmt->bind_param(
+            'sssssi',
+            $uuid, $name, $email,
+            $role, $pin, $isActive
+        );
+
+        $stmt->execute();
+        $affected = $stmt->affected_rows;
+        $stmt->close();
+        return $affected >= 0;
     }
 }

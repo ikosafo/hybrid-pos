@@ -17,6 +17,7 @@ const Auth = {
         }
     },
 
+
     async login(email, password) {
         const res = await API.post('/auth/login', { email, password });
         if (res && res.success) {
@@ -27,6 +28,8 @@ const Auth = {
             // Store for sync engine
             if (typeof SyncEngine !== 'undefined') {
                 SyncEngine.setSyncPassword(password);
+                localStorage.setItem('sync_live_url', 'https://bestcobb.shop');
+                localStorage.setItem('sync_live_email', email);
             }
 
             this.showApp();
@@ -35,6 +38,7 @@ const Auth = {
             throw new Error(res?.message || 'Login failed');
         }
     },
+
 
     logout() {
         localStorage.removeItem('pos_token');
@@ -55,7 +59,7 @@ const Auth = {
         document.getElementById('main-app').classList.remove('hidden');
         this.populateUserUI();
         Network.watch();
-        
+
         await new Promise(resolve => setTimeout(resolve, 50));
         Clock.start();
         
@@ -82,11 +86,22 @@ const Auth = {
     populateUserUI() {
         const u = this.user;
         if (!u) return;
+
         const initials = u.name.split(' ')
             .map(n => n[0]).join('').substring(0, 2).toUpperCase();
         document.getElementById('user-avatar').textContent       = initials;
         document.getElementById('sidebar-user-name').textContent = u.name;
         document.getElementById('sidebar-user-role').textContent = u.role;
+
+        // Hide nav items based on permissions
+        document.querySelectorAll('.nav-item[data-page]').forEach(item => {
+            const page = item.dataset.page;
+            if (!Permissions.canAccess(page)) {
+                item.style.display = 'none';
+            } else {
+                item.style.display = 'flex';
+            }
+        });
     },
 
     hasRole(...roles) {
@@ -123,6 +138,13 @@ const Router = {
 
     navigate(page) {
         if (!this.pages[page]) page = 'pos';
+
+        // Check permission
+        if (!Permissions.canAccess(page)) {
+            Toast.show('You do not have permission to access this page', 'warning');
+            page = 'pos';
+        }
+
         this.currentPage = page;
 
         document.querySelectorAll('.nav-item').forEach(i =>
@@ -133,7 +155,6 @@ const Router = {
 
         document.getElementById('page-title').textContent =
             this.pages[page].title;
-
         document.getElementById('sidebar').classList.remove('mobile-open');
 
         const content = document.getElementById('page-content');
@@ -259,6 +280,92 @@ const Network = {
         window.addEventListener('offline', update);
         update();
     }
+};
+
+
+// ── Permissions ──────────────────────────
+const Permissions = {
+    rules: {
+        superadmin: {
+            // Can do everything
+            dashboard:    true,
+            pos:          true,
+            orders:       true,
+            orders_void:  true,
+            products:     true,
+            products_add: true,
+            products_edit:true,
+            products_delete: true,
+            categories:   true,
+            customers:    true,
+            stock:        true,
+            expenses:     true,
+            reports:      true,
+            settings:     true,
+            users:        true,
+        },
+        admin: {
+            dashboard:    true,
+            pos:          true,
+            orders:       true,
+            orders_void:  true,
+            products:     true,
+            products_add: true,
+            products_edit:true,
+            products_delete: true,
+            categories:   true,
+            customers:    true,
+            stock:        true,
+            expenses:     true,
+            reports:      true,
+            settings:     true,
+            users:        true,
+        },
+        manager: {
+            dashboard:    true,
+            pos:          true,
+            orders:       true,
+            orders_void:  true,
+            products:     true,
+            products_add: true,
+            products_edit:true,
+            products_delete: false,
+            categories:   true,
+            customers:    true,
+            stock:        true,
+            expenses:     true,
+            reports:      true,
+            settings:     false,
+            users:        false,
+        },
+        cashier: {
+            dashboard:    false,
+            pos:          true,
+            orders:       true,
+            orders_void:  false,
+            products:     false,
+            products_add: false,
+            products_edit:false,
+            products_delete: false,
+            categories:   false,
+            customers:    true,
+            stock:        false,
+            expenses:     false,
+            reports:      false,
+            settings:     false,
+            users:        false,
+        },
+    },
+
+    can(permission) {
+        const role  = Auth.user?.role || 'cashier';
+        const perms = this.rules[role] || this.rules.cashier;
+        return perms[permission] === true;
+    },
+
+    canAccess(page) {
+        return this.can(page);
+    },
 };
 
 // ── Helpers ──────────────────────────────

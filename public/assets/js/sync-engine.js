@@ -116,7 +116,6 @@ const SyncEngine = {
 
     // ── Get live server auth token ───────────
     async getLiveToken() {
-        // Use cached live token if still valid
         const cached = localStorage.getItem('live_sync_token');
         const expiry = localStorage.getItem('live_sync_token_expiry');
 
@@ -124,19 +123,23 @@ const SyncEngine = {
             return cached;
         }
 
-        // Get current user credentials
-        const user = JSON.parse(localStorage.getItem('pos_user') || '{}');
-        if (!user.email) return null;
+        // Get credentials — from sync config or stored login
+        const liveUrl  = localStorage.getItem('sync_live_url')
+            || 'https://bestcobb.shop';
+        const email    = localStorage.getItem('sync_live_email')
+            || JSON.parse(localStorage.getItem('pos_user') || '{}').email;
+        const password = localStorage.getItem('sync_pass');
 
-        // Login to live server
+        if (!email || !password) {
+            console.warn('[SyncEngine] No sync credentials available');
+            return null;
+        }
+
         try {
-            const res = await fetch(`${this.LIVE_URL}/auth/login`, {
+            const res = await fetch(`${liveUrl}/public/api/auth/login`, {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({
-                    email:    user.email,
-                    password: localStorage.getItem('sync_pass') || 'Admin@1234',
-                }),
+                body:    JSON.stringify({ email, password }),
             });
 
             const data = await res.json();
@@ -156,6 +159,7 @@ const SyncEngine = {
     // ── Push local data to live ──────────────
     async pushToLive(liveToken) {
         const entities = [
+            'users',
             'categories',
             'products',
             'customers',
@@ -221,6 +225,7 @@ const SyncEngine = {
     // ── Pull live data to local ──────────────
     async pullFromLive(liveToken, forceSince = null) {
         const entities = [
+            'users',
             'categories',
             'products',
             'customers',

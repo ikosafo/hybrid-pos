@@ -207,6 +207,18 @@ const SettingsPageModule = {
         const res = await API.put('/settings', data);
         if (res?.success) {
             Toast.show('Settings saved successfully!', 'success');
+            // Update cached settings
+            if (typeof OfflineDB !== 'undefined' && OfflineDB.ready) {
+                await OfflineDB.saveSettings(data);
+            }
+            // Update POS store settings
+            if (typeof POSPage !== 'undefined') {
+                POSPage.storeSettings = data;
+            }
+            // Refresh sync cache
+            if (typeof SyncManager !== 'undefined') {
+                SyncManager.cacheAllData();
+            }
         } else {
             Toast.show(res?.message || 'Failed to save settings', 'error');
         }
@@ -310,6 +322,14 @@ const SettingsPageModule = {
 
     openUserModal(id = null) {
         const u = id ? SettingsPageModule.users.find(x => x.id == id) : null;
+
+        const rolePermissions = {
+            superadmin: 'Full access to everything',
+            admin:      'Full access except cannot manage superadmin accounts',
+            manager:    'Can manage POS, orders, stock, expenses and reports. Cannot manage settings or users',
+            cashier:    'Can only use POS and view own orders. No access to reports, stock or settings',
+        };
+
         Modal.show(`
             <div class="modal-overlay">
                 <div class="modal">
@@ -323,48 +343,80 @@ const SettingsPageModule = {
                         <div class="form-row">
                             <div class="form-group">
                                 <label>Full Name *</label>
-                                <input type="text" id="u-name" value="${u?.name || ''}" placeholder="John Doe">
+                                <input type="text" id="u-name"
+                                    value="${u?.name || ''}" placeholder="John Doe">
                             </div>
                             <div class="form-group">
                                 <label>Role *</label>
-                                <select id="u-role">
+                                <select id="u-role"
+                                    onchange="SettingsPageModule.updateRoleInfo(this.value)">
                                     ${['superadmin','admin','manager','cashier'].map(r => `
-                                        <option value="${r}" ${u?.role === r ? 'selected' : ''}>${r}</option>
+                                        <option value="${r}"
+                                            ${u?.role === r ? 'selected' : ''}>${r}
+                                        </option>
                                     `).join('')}
                                 </select>
                             </div>
                         </div>
+
+                        <!-- Role permissions info -->
+                        <div id="role-info" style="background:var(--accent-light);
+                            border-radius:var(--radius-sm);padding:10px 14px;
+                            margin-bottom:16px;font-size:12px;color:var(--accent);">
+                            <i class="fas fa-shield-alt"></i>
+                            <span id="role-info-text">
+                                ${rolePermissions[u?.role || 'cashier']}
+                            </span>
+                        </div>
+
+                        <!-- Permissions breakdown -->
+                        <div id="role-permissions" style="margin-bottom:16px;">
+                            ${SettingsPageModule.renderPermissions(u?.role || 'cashier')}
+                        </div>
+
                         <div class="form-group">
                             <label>Email *</label>
-                            <input type="email" id="u-email" value="${u?.email || ''}"
+                            <input type="email" id="u-email"
+                                value="${u?.email || ''}"
                                 placeholder="user@example.com">
                         </div>
                         <div class="form-row">
                             <div class="form-group">
                                 <label>${u ? 'New Password' : 'Password *'}</label>
                                 <input type="password" id="u-password"
-                                    placeholder="${u ? 'Leave blank to keep current' : 'Min 6 characters'}">
+                                    placeholder="${u
+                                        ? 'Leave blank to keep current'
+                                        : 'Min 6 characters'}">
                             </div>
                             <div class="form-group">
                                 <label>PIN (optional)</label>
-                                <input type="text" id="u-pin" value="${u?.pin || ''}"
-                                    placeholder="4-6 digit PIN" maxlength="6">
+                                <input type="text" id="u-pin"
+                                    value="${u?.pin || ''}"
+                                    placeholder="4-6 digit PIN"
+                                    maxlength="6">
                             </div>
                         </div>
                         ${u ? `
                         <div class="form-group">
                             <label>Status</label>
                             <select id="u-active">
-                                <option value="1" ${u.is_active ? 'selected' : ''}>Active</option>
-                                <option value="0" ${!u.is_active ? 'selected' : ''}>Inactive</option>
+                                <option value="1" ${u.is_active ? 'selected' : ''}>
+                                    Active
+                                </option>
+                                <option value="0" ${!u.is_active ? 'selected' : ''}>
+                                    Inactive
+                                </option>
                             </select>
                         </div>` : ''}
                     </div>
                     <div class="modal-footer">
-                        <button class="btn btn-ghost" onclick="Modal.close()">Cancel</button>
+                        <button class="btn btn-ghost" onclick="Modal.close()">
+                            Cancel
+                        </button>
                         <button class="btn btn-primary"
                             onclick="SettingsPageModule.saveUser(${id || 'null'})">
-                            <i class="fas fa-save"></i> ${u ? 'Update' : 'Create'} User
+                            <i class="fas fa-save"></i>
+                            ${u ? 'Update' : 'Create'} User
                         </button>
                     </div>
                 </div>
@@ -700,5 +752,78 @@ const SettingsPageModule = {
                 </div>
             </div>
         `;
-    }
+    },
+
+
+    updateRoleInfo(role) {
+        const descriptions = {
+            superadmin: 'Full access to everything including system settings',
+            admin:      'Full access except cannot manage superadmin accounts',
+            manager:    'Can manage POS, orders, stock, expenses and reports',
+            cashier:    'POS only — no access to reports, stock or settings',
+        };
+        const el = document.getElementById('role-info-text');
+        if (el) el.textContent = descriptions[role] || '';
+
+        const permsEl = document.getElementById('role-permissions');
+        if (permsEl) permsEl.innerHTML = SettingsPageModule.renderPermissions(role);
+    },
+
+    renderPermissions(role) {
+        const perms = {
+            superadmin: {
+                'Point of Sale': true, 'Orders & Void': true,
+                'Products': true, 'Categories': true,
+                'Customers': true, 'Stock Management': true,
+                'Expenses': true, 'Reports': true,
+                'Settings': true, 'User Management': true,
+                'Dashboard': true,
+            },
+            admin: {
+                'Point of Sale': true, 'Orders & Void': true,
+                'Products': true, 'Categories': true,
+                'Customers': true, 'Stock Management': true,
+                'Expenses': true, 'Reports': true,
+                'Settings': true, 'User Management': true,
+                'Dashboard': true,
+            },
+            manager: {
+                'Point of Sale': true, 'Orders & Void': true,
+                'Products': true, 'Categories': true,
+                'Customers': true, 'Stock Management': true,
+                'Expenses': true, 'Reports': true,
+                'Settings': false, 'User Management': false,
+                'Dashboard': true,
+            },
+            cashier: {
+                'Point of Sale': true, 'Orders & Void': false,
+                'Products': false, 'Categories': false,
+                'Customers': true, 'Stock Management': false,
+                'Expenses': false, 'Reports': false,
+                'Settings': false, 'User Management': false,
+                'Dashboard': false,
+            },
+        };
+
+        const rolePerms = perms[role] || perms.cashier;
+
+        return `
+            <div style="display:grid;grid-template-columns:1fr 1fr;
+                gap:6px;font-size:12px;">
+                ${Object.entries(rolePerms).map(([perm, allowed]) => `
+                    <div style="display:flex;align-items:center;gap:6px;
+                        padding:6px 10px;border-radius:6px;
+                        background:${allowed ? 'var(--success-light)' : 'var(--danger-light)'};">
+                        <i class="fas fa-${allowed ? 'check' : 'times'}"
+                            style="color:${allowed ? 'var(--success)' : 'var(--danger)'};
+                            width:12px;"></i>
+                        <span style="color:${allowed
+                            ? 'var(--success)' : 'var(--danger)'};">
+                            ${perm}
+                        </span>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+    },
 };
