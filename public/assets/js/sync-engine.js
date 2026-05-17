@@ -186,7 +186,7 @@ const SyncEngine = {
             `/sync/pull?entity_type=${entityType}&since=1970-01-01&unsynced_only=true`
         );
 
-        console.log(`[DEBUG] pushEntity ${entityType}:`, localRes?.data?.records?.length || 0, 'records');  // ← ADD THIS
+        console.log(`[DEBUG] pushEntity ${entityType}:`, localRes?.data?.records?.length || 0, 'records');
 
         if (!localRes?.success || !localRes.data.records.length) return;
 
@@ -213,11 +213,15 @@ const SyncEngine = {
         });
 
         const data = await res.json();
-        if (data.success) {
+        
+        // Only acknowledge if records were actually synced
+        if (data.success && data.data.synced > 0) {
             console.log(`[SyncEngine] Pushed ${data.data.synced} ${entityType}`);
 
-            // Mark as synced locally
+            // Only acknowledge the records that were successfully synced
+            const syncedCount = data.data.synced;
             const uuids = records
+                .slice(0, syncedCount)  // Only mark the ones that synced
                 .filter(r => r.uuid)
                 .map(r => r.uuid);
 
@@ -227,6 +231,8 @@ const SyncEngine = {
                     uuids,
                 });
             }
+        } else {
+            console.warn(`[SyncEngine] Push ${entityType} failed:`, data.message || '0 records synced');
         }
     },
 
