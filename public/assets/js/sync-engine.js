@@ -191,6 +191,10 @@ const SyncEngine = {
 
         console.log(`[SyncEngine] Pushing ${records.length} ${entityType} to live`);
 
+        if (entityType === 'orders') {
+            console.log('[DEBUG] Order records being pushed:', JSON.stringify(records));
+        }
+
         // Send to live server
         const res = await fetch(`${this.LIVE_URL}/sync/push`, {
             method:  'POST',
