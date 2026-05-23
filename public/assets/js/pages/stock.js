@@ -1,5 +1,6 @@
 // ═══════════════════════════════════════════
 //  HybridPOS — Stock Management Page
+//  v2: Select2 searchable product dropdowns
 // ═══════════════════════════════════════════
 
 const StockPage = {
@@ -7,15 +8,220 @@ const StockPage = {
     movements:  [],
     activeTab:  'overview',
 
+    // ─────────────────────────────────────────────────────────────
+    //  Ensure Select2 is loaded (shared helper)
+    // ─────────────────────────────────────────────────────────────
+    async _ensureSelect2() {
+        if (!document.getElementById('select2-css')) {
+            const lnk = document.createElement('link');
+            lnk.id    = 'select2-css';
+            lnk.rel   = 'stylesheet';
+            lnk.href  = 'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css';
+            document.head.appendChild(lnk);
+        }
+        if (!window.jQuery) {
+            await this._loadScript('https://code.jquery.com/jquery-3.7.1.min.js');
+        }
+        if (!window.jQuery?.fn?.select2) {
+            await this._loadScript(
+                'https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js'
+            );
+        }
+    },
+
+    _loadScript(src) {
+        return new Promise((res, rej) => {
+            // Avoid double-loading
+            if (document.querySelector(`script[src="${src}"]`)) { res(); return; }
+            const s   = document.createElement('script');
+            s.src     = src;
+            s.onload  = res;
+            s.onerror = rej;
+            document.head.appendChild(s);
+        });
+    },
+
+    // ─────────────────────────────────────────────────────────────
+    //  Inject the shared Select2 dark-theme overrides once
+    // ─────────────────────────────────────────────────────────────
+    _injectSelect2Styles() {
+        if (document.getElementById('stock-select2-styles')) return;
+        const style = document.createElement('style');
+        style.id    = 'stock-select2-styles';
+        style.textContent = `
+            /* ── Stock page Select2 dark overrides ── */
+            .stock-select2 + .select2-container { width: 100% !important; }
+            .select2-container--default .select2-selection--single {
+                background: var(--bg-secondary);
+                border: 1px solid var(--border);
+                border-radius: var(--radius-sm);
+                height: 42px;
+                display: flex;
+                align-items: center;
+                padding: 0 12px;
+                transition: border-color .15s;
+            }
+            .select2-container--default.select2-container--focus
+                .select2-selection--single,
+            .select2-container--default.select2-container--open
+                .select2-selection--single {
+                border-color: var(--accent);
+                outline: none;
+            }
+            .select2-container--default .select2-selection--single
+                .select2-selection__rendered {
+                color: var(--text-primary);
+                font-size: 13px;
+                line-height: 40px;
+                padding-left: 0;
+            }
+            .select2-container--default .select2-selection--single
+                .select2-selection__placeholder {
+                color: var(--text-muted);
+            }
+            .select2-container--default .select2-selection--single
+                .select2-selection__arrow {
+                height: 40px;
+                right: 10px;
+            }
+            .select2-container--default .select2-selection--single
+                .select2-selection__arrow b {
+                border-color: var(--text-muted) transparent transparent transparent;
+            }
+            .select2-dropdown {
+                background: var(--bg-secondary);
+                border: 1px solid var(--accent);
+                border-radius: var(--radius-sm);
+                box-shadow: 0 10px 32px rgba(0,0,0,.40);
+                z-index: 9999;
+            }
+            .select2-container--default .select2-results__option {
+                color: var(--text-primary);
+                font-size: 13px;
+                padding: 9px 14px;
+                border-bottom: 1px solid var(--border);
+            }
+            .select2-container--default .select2-results__option:last-child {
+                border-bottom: none;
+            }
+            .select2-container--default
+                .select2-results__option--highlighted[aria-selected] {
+                background: var(--accent);
+                color: #fff;
+            }
+            .select2-container--default
+                .select2-results__option[aria-selected=true] {
+                background: var(--bg-primary);
+                color: var(--accent);
+                font-weight: 700;
+            }
+            .select2-search--dropdown {
+                padding: 8px 10px;
+                border-bottom: 1px solid var(--border);
+                background: var(--bg-primary);
+            }
+            .select2-search--dropdown .select2-search__field {
+                background: var(--bg-secondary);
+                border: 1px solid var(--border);
+                color: var(--text-primary);
+                border-radius: var(--radius-sm);
+                padding: 7px 12px;
+                font-size: 13px;
+                width: 100%;
+            }
+            .select2-search--dropdown .select2-search__field:focus {
+                border-color: var(--accent);
+                outline: none;
+            }
+            .select2-results__options { max-height: 280px; }
+            /* Stock sub-label inside option */
+            .s2-product-stock {
+                float: right;
+                font-size: 11px;
+                font-weight: 700;
+                opacity: .75;
+            }
+            .s2-product-stock.low  { color: #f59e0b; }
+            .s2-product-stock.out  { color: #ef4444; }
+            .s2-product-stock.ok   { color: #22c55e; }
+        `;
+        document.head.appendChild(style);
+    },
+
+    // ─────────────────────────────────────────────────────────────
+    //  Build a Select2 on a given <select> element id
+    //  Adds stock-level badges inside each option using templateResult
+    // ─────────────────────────────────────────────────────────────
+    _initProductSelect2(selectId, onChangeFn) {
+        if (!window.jQuery?.fn?.select2) return;
+        const $ = window.jQuery;
+
+        const formatOption = (opt) => {
+            if (!opt.id) return opt.text; // placeholder
+
+            const $opt  = $(opt.element);
+            const stock = parseFloat($opt.data('stock') || 0);
+            const unit  = $opt.data('unit') || '';
+            const alert = parseFloat($opt.data('alert') || 0);
+
+            let cls = 'ok';
+            if (stock <= 0)           cls = 'out';
+            else if (stock <= alert)  cls = 'low';
+
+            const $el = $(
+                `<span>${opt.text}
+                    <span class="s2-product-stock ${cls}">
+                        ${stock} ${unit}
+                    </span>
+                </span>`
+            );
+            return $el;
+        };
+
+        $(`#${selectId}`).select2({
+            theme:                   'default',
+            placeholder:             '— Search or choose a product —',
+            allowClear:              true,
+            width:                   '100%',
+            templateResult:          formatOption,
+            // Plain text for the selected label (no badge clutter)
+            templateSelection: (opt) => opt.text || '— Search or choose a product —',
+        });
+
+        if (onChangeFn) {
+            $(`#${selectId}`).on('change', onChangeFn);
+        }
+    },
+
+    // ─────────────────────────────────────────────────────────────
+    //  Build the <option> list HTML shared across all three forms
+    // ─────────────────────────────────────────────────────────────
+    _productOptions() {
+        return this.products.map(p => {
+            const stock = parseFloat(p.stock_qty);
+            const alert = parseFloat(p.low_stock_alert || 0);
+            return `<option
+                value="${p.id}"
+                data-stock="${p.stock_qty}"
+                data-unit="${p.unit}"
+                data-alert="${alert}">
+                ${p.name} (${stock} ${p.unit} in stock)
+            </option>`;
+        }).join('');
+    },
+
+    // ─────────────────────────────────────────────────────────────
+    //  LOAD
+    // ─────────────────────────────────────────────────────────────
     async load() {
         document.getElementById('page-content').innerHTML = `
             <div class="tabs-container">
                 ${[
-                    { id: 'overview',   icon: 'chart-bar',      label: 'Overview' },
-                    { id: 'restock',    icon: 'plus-circle',    label: 'Restock' },
-                    { id: 'adjust',     icon: 'sliders-h',      label: 'Adjust Stock' },
-                    { id: 'damage',     icon: 'exclamation-triangle', label: 'Damage / Return' },
-                    { id: 'movements',  icon: 'history',        label: 'Movement History' },
+                    { id: 'overview',   icon: 'chart-bar',            label: 'Overview'          },
+                    { id: 'restock',    icon: 'plus-circle',          label: 'Restock'           },
+                    { id: 'adjust',     icon: 'sliders-h',            label: 'Adjust Stock'      },
+                    { id: 'damage',     icon: 'exclamation-triangle', label: 'Damage / Return'   },
+                    { id: 'movements',  icon: 'history',              label: 'Movement History'  },
                 ].map(tab => `
                     <button class="settings-tab ${tab.id === StockPage.activeTab ? 'active' : ''}"
                         data-tab="${tab.id}"
@@ -28,6 +234,10 @@ const StockPage = {
                 <div class="empty-state"><i class="fas fa-spinner fa-spin"></i></div>
             </div>
         `;
+
+        // Load Select2 and styles early so tabs are instant
+        await this._ensureSelect2();
+        this._injectSelect2Styles();
 
         await this.fetchProducts();
         await this.switchTab(this.activeTab);
@@ -68,54 +278,42 @@ const StockPage = {
         document.getElementById('stock-content').innerHTML = `
             <div class="stats-grid" style="margin-bottom:24px;">
                 <div class="stat-card">
-                    <div class="stat-icon blue">
-                        <i class="fas fa-boxes"></i>
-                    </div>
+                    <div class="stat-icon blue"><i class="fas fa-boxes"></i></div>
                     <div class="stat-info">
                         <div class="stat-value">${parseInt(s.total_products || 0)}</div>
                         <div class="stat-label">Total Products</div>
                     </div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-icon green">
-                        <i class="fas fa-cubes"></i>
-                    </div>
+                    <div class="stat-icon green"><i class="fas fa-cubes"></i></div>
                     <div class="stat-info">
                         <div class="stat-value">${parseFloat(s.total_units || 0).toFixed(0)}</div>
                         <div class="stat-label">Total Units in Stock</div>
                     </div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-icon purple">
-                        <i class="fas fa-tag"></i>
-                    </div>
+                    <div class="stat-icon purple"><i class="fas fa-tag"></i></div>
                     <div class="stat-info">
                         <div class="stat-value">${formatCurrency(s.total_retail_value || 0)}</div>
                         <div class="stat-label">Retail Value</div>
                     </div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-icon yellow">
-                        <i class="fas fa-coins"></i>
-                    </div>
+                    <div class="stat-icon yellow"><i class="fas fa-coins"></i></div>
                     <div class="stat-info">
                         <div class="stat-value">${formatCurrency(s.total_cost_value || 0)}</div>
                         <div class="stat-label">Cost Value</div>
                     </div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-icon red">
-                        <i class="fas fa-exclamation-triangle"></i>
-                    </div>
+                    <div class="stat-icon red"><i class="fas fa-exclamation-triangle"></i></div>
                     <div class="stat-info">
                         <div class="stat-value">${parseInt(s.low_stock_count || 0)}</div>
                         <div class="stat-label">Low Stock Items</div>
                     </div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-icon red">
-                        <i class="fas fa-times-circle"></i>
-                    </div>
+                    <div class="stat-icon red"><i class="fas fa-times-circle"></i></div>
                     <div class="stat-info">
                         <div class="stat-value">${parseInt(s.out_of_stock_count || 0)}</div>
                         <div class="stat-label">Out of Stock</div>
@@ -205,15 +403,9 @@ const StockPage = {
                 <div class="card-body">
                     <div class="form-group">
                         <label>Select Product *</label>
-                        <select id="restock-product" onchange="StockPage.showCurrentStock('restock')">
-                            <option value="">— Choose Product —</option>
-                            ${StockPage.products.map(p => `
-                                <option value="${p.id}"
-                                    data-stock="${p.stock_qty}"
-                                    data-unit="${p.unit}">
-                                    ${p.name} (${parseFloat(p.stock_qty)} ${p.unit} in stock)
-                                </option>
-                            `).join('')}
+                        <select id="restock-product" class="stock-select2">
+                            <option value=""></option>
+                            ${this._productOptions()}
                         </select>
                     </div>
                     <div id="restock-current-stock"></div>
@@ -235,28 +427,63 @@ const StockPage = {
                 </div>
             </div>
         `;
+
+        this._initProductSelect2('restock-product', () =>
+            StockPage.showCurrentStock('restock')
+        );
     },
 
     showCurrentStock(type) {
-        const sel     = document.getElementById(`${type}-product`);
-        const opt     = sel.options[sel.selectedIndex];
-        const stock   = opt.dataset.stock;
-        const unit    = opt.dataset.unit;
-        const el      = document.getElementById(`${type}-current-stock`);
-        if (!el || !stock) return;
-        el.innerHTML  = `
-            <div style="background:var(--info-light);border-radius:var(--radius-sm);
-                padding:12px 16px;margin-bottom:16px;display:flex;
+        const $ = window.jQuery;
+        const selectId = `${type}-product`;
+
+        let stock, unit;
+
+        if ($ && $(`#${selectId}`).data('select2')) {
+            // Reading from Select2
+            const selectedOpt = $(`#${selectId} option:selected`);
+            stock = selectedOpt.data('stock');
+            unit  = selectedOpt.data('unit');
+        } else {
+            const sel = document.getElementById(selectId);
+            const opt = sel?.options[sel.selectedIndex];
+            stock     = opt?.dataset.stock;
+            unit      = opt?.dataset.unit;
+        }
+
+        const el = document.getElementById(`${type}-current-stock`);
+        if (!el || !stock) { if (el) el.innerHTML = ''; return; }
+
+        const stockNum  = parseFloat(stock);
+        const alertNum  = parseFloat(
+            ($ && $(`#${selectId} option:selected`).data('alert')) || 0
+        );
+        let color = 'var(--info)';
+        let bg    = 'var(--info-light, #eff6ff)';
+        if (stockNum <= 0)          { color = 'var(--danger)';  bg = '#fee2e222'; }
+        else if (stockNum <= alertNum) { color = 'var(--warning)'; bg = '#fef3c722'; }
+
+        el.innerHTML = `
+            <div style="background:${bg};border:1px solid ${color}33;
+                border-radius:var(--radius-sm);padding:12px 16px;
+                margin-bottom:16px;display:flex;
                 justify-content:space-between;align-items:center;">
-                <span style="font-size:13px;color:var(--info);">Current Stock</span>
-                <strong style="color:var(--info);">${parseFloat(stock)} ${unit}</strong>
+                <span style="font-size:13px;color:${color};">
+                    <i class="fas fa-box" style="margin-right:6px;"></i>
+                    Current Stock
+                </span>
+                <strong style="color:${color};font-size:16px;">
+                    ${stockNum} ${unit}
+                </strong>
             </div>`;
     },
 
     async submitRestock() {
-        const productId = document.getElementById('restock-product').value;
-        const qty       = parseFloat(document.getElementById('restock-qty').value);
-        const notes     = document.getElementById('restock-notes').value.trim();
+        const $ = window.jQuery;
+        const productId = $ ? $(`#restock-product`).val()
+                            : document.getElementById('restock-product').value;
+        const qty   = parseFloat(document.getElementById('restock-qty').value);
+        const notes = document.getElementById('restock-notes').value.trim();
 
         if (!productId) { Toast.show('Please select a product', 'warning'); return; }
         if (!qty || qty <= 0) { Toast.show('Please enter a valid quantity', 'warning'); return; }
@@ -272,7 +499,7 @@ const StockPage = {
                 `✅ ${res.data.product_name}: ${res.data.qty_before} → ${res.data.qty_after} ${res.data.unit}`,
                 'success', 4000
             );
-            document.getElementById('restock-product').value = '';
+            if ($) $(`#restock-product`).val(null).trigger('change');
             document.getElementById('restock-qty').value     = '';
             document.getElementById('restock-notes').value   = '';
             document.getElementById('restock-current-stock').innerHTML = '';
@@ -365,16 +592,9 @@ const StockPage = {
                     </p>
                     <div class="form-group">
                         <label>Select Product *</label>
-                        <select id="adjust-product"
-                            onchange="StockPage.showCurrentStock('adjust')">
-                            <option value="">— Choose Product —</option>
-                            ${StockPage.products.map(p => `
-                                <option value="${p.id}"
-                                    data-stock="${p.stock_qty}"
-                                    data-unit="${p.unit}">
-                                    ${p.name} (${parseFloat(p.stock_qty)} ${p.unit} in stock)
-                                </option>
-                            `).join('')}
+                        <select id="adjust-product" class="stock-select2">
+                            <option value=""></option>
+                            ${this._productOptions()}
                         </select>
                     </div>
                     <div id="adjust-current-stock"></div>
@@ -398,16 +618,22 @@ const StockPage = {
                 </div>
             </div>
         `;
+
+        this._initProductSelect2('adjust-product', () =>
+            StockPage.showCurrentStock('adjust')
+        );
     },
 
     async submitAdjust() {
-        const productId = document.getElementById('adjust-product').value;
-        const qty       = parseFloat(document.getElementById('adjust-qty').value);
-        const notes     = document.getElementById('adjust-notes').value.trim();
+        const $ = window.jQuery;
+        const productId = $ ? $(`#adjust-product`).val()
+                            : document.getElementById('adjust-product').value;
+        const qty   = parseFloat(document.getElementById('adjust-qty').value);
+        const notes = document.getElementById('adjust-notes').value.trim();
 
-        if (!productId)     { Toast.show('Please select a product', 'warning'); return; }
-        if (isNaN(qty))     { Toast.show('Please enter a valid quantity', 'warning'); return; }
-        if (!notes)         { Toast.show('Please provide a reason for adjustment', 'warning'); return; }
+        if (!productId)  { Toast.show('Please select a product', 'warning'); return; }
+        if (isNaN(qty))  { Toast.show('Please enter a valid quantity', 'warning'); return; }
+        if (!notes)      { Toast.show('Please provide a reason for adjustment', 'warning'); return; }
 
         const res = await API.post('/stock/adjust', {
             product_id:   parseInt(productId),
@@ -420,7 +646,7 @@ const StockPage = {
                 `✅ ${res.data.product_name}: ${res.data.qty_before} → ${res.data.qty_after} ${res.data.unit}`,
                 'success', 4000
             );
-            document.getElementById('adjust-product').value = '';
+            if ($) $(`#adjust-product`).val(null).trigger('change');
             document.getElementById('adjust-qty').value     = '';
             document.getElementById('adjust-notes').value   = '';
             document.getElementById('adjust-current-stock').innerHTML = '';
@@ -469,16 +695,9 @@ const StockPage = {
                     </div>
                     <div class="form-group">
                         <label>Select Product *</label>
-                        <select id="damage-product"
-                            onchange="StockPage.showCurrentStock('damage')">
-                            <option value="">— Choose Product —</option>
-                            ${StockPage.products.map(p => `
-                                <option value="${p.id}"
-                                    data-stock="${p.stock_qty}"
-                                    data-unit="${p.unit}">
-                                    ${p.name} (${parseFloat(p.stock_qty)} ${p.unit} in stock)
-                                </option>
-                            `).join('')}
+                        <select id="damage-product" class="stock-select2">
+                            <option value=""></option>
+                            ${this._productOptions()}
                         </select>
                     </div>
                     <div id="damage-current-stock"></div>
@@ -501,6 +720,10 @@ const StockPage = {
             </div>
         `;
 
+        this._initProductSelect2('damage-product', () =>
+            StockPage.showCurrentStock('damage')
+        );
+
         // Highlight first option
         const first = document.querySelector('label[onclick*="damage"]');
         if (first) first.style.borderColor = 'var(--danger)';
@@ -514,10 +737,12 @@ const StockPage = {
     },
 
     async submitDamage() {
-        const productId = document.getElementById('damage-product').value;
-        const qty       = parseFloat(document.getElementById('damage-qty').value);
-        const notes     = document.getElementById('damage-notes').value.trim();
-        const type      = document.querySelector('input[name="damage-type"]:checked')?.value || 'damage';
+        const $ = window.jQuery;
+        const productId = $ ? $(`#damage-product`).val()
+                            : document.getElementById('damage-product').value;
+        const qty   = parseFloat(document.getElementById('damage-qty').value);
+        const notes = document.getElementById('damage-notes').value.trim();
+        const type  = document.querySelector('input[name="damage-type"]:checked')?.value || 'damage';
 
         if (!productId)       { Toast.show('Please select a product', 'warning'); return; }
         if (!qty || qty <= 0) { Toast.show('Please enter a valid quantity', 'warning'); return; }
@@ -535,7 +760,7 @@ const StockPage = {
                 `✅ ${res.data.product_name}: ${res.data.qty_before} → ${res.data.qty_after} ${res.data.unit}`,
                 'success', 4000
             );
-            document.getElementById('damage-product').value = '';
+            if ($) $(`#damage-product`).val(null).trigger('change');
             document.getElementById('damage-qty').value     = '';
             document.getElementById('damage-notes').value   = '';
             document.getElementById('damage-current-stock').innerHTML = '';

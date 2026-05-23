@@ -994,16 +994,19 @@ const POSPage = {
                 <div class="receipt-footer">
                     <div class="receipt-divider">================================</div>
                     <div class="receipt-footer-text">
-                        ${s.receipt_footer || 'Thank you for your purchase!'}
+                        ${s.receipt_footer || 'Thank you for choosing Best Cobb!'}
                     </div>
                     <div class="receipt-footer-text">
-                        Please keep this receipt
+                        We look forward to serving you again.
                     </div>
                 </div>
             </div>
         `;
     },
 
+    // ─────────────────────────────────────────────────────────────
+    //  PRINT RECEIPT — bold, high-contrast thermal output
+    // ─────────────────────────────────────────────────────────────
     printReceipt() {
         const content = document.getElementById('receipt-content')?.innerHTML;
         if (!content) return;
@@ -1016,69 +1019,93 @@ const POSPage = {
                 <meta charset="UTF-8">
                 <title>Receipt</title>
                 <style>
-                    * { margin:0; padding:0; box-sizing:border-box; }
+                    * {
+                        margin: 0;
+                        padding: 0;
+                        box-sizing: border-box;
+                    }
                     body {
                         font-family: 'Courier New', Courier, monospace;
-                        font-size: 12px;
+                        font-size: 13px;
                         width: 80mm;
-                        padding: 4mm;
-                        color: #000;
+                        padding: 5mm;
+                        color: #000 !important;
                         background: #fff;
+                        -webkit-print-color-adjust: exact;
+                        print-color-adjust: exact;
                     }
                     .thermal-receipt { width: 100%; }
                     .receipt-store-name {
                         text-align: center;
-                        font-size: 16px;
-                        font-weight: bold;
-                        margin-bottom: 4px;
+                        font-size: 18px;
+                        font-weight: 900;
+                        margin-bottom: 5px;
                         text-transform: uppercase;
+                        color: #000;
+                        letter-spacing: 1px;
                     }
                     .receipt-store-info {
                         text-align: center;
-                        font-size: 11px;
-                        margin-bottom: 2px;
+                        font-size: 12px;
+                        font-weight: 600;
+                        margin-bottom: 3px;
+                        color: #000;
                     }
                     .receipt-divider {
                         text-align: center;
-                        font-size: 11px;
-                        margin: 4px 0;
-                        letter-spacing: 0;
+                        font-size: 12px;
+                        font-weight: 700;
+                        margin: 5px 0;
+                        color: #000;
+                        letter-spacing: 1px;
                     }
                     .receipt-row {
                         display: flex;
                         justify-content: space-between;
-                        margin-bottom: 3px;
-                        font-size: 12px;
+                        margin-bottom: 5px;
+                        font-size: 13px;
+                        font-weight: 600;
+                        color: #000;
                     }
                     .receipt-items-header {
                         display: grid;
                         grid-template-columns: 2fr 0.5fr 1fr 1fr;
-                        font-weight: bold;
-                        font-size: 11px;
-                        margin-bottom: 2px;
+                        font-weight: 900;
+                        font-size: 12px;
+                        margin-bottom: 4px;
+                        color: #000;
+                        text-transform: uppercase;
+                        letter-spacing: .5px;
                     }
                     .receipt-item {
                         display: grid;
                         grid-template-columns: 2fr 0.5fr 1fr 1fr;
-                        margin-bottom: 3px;
-                        font-size: 11px;
+                        margin-bottom: 5px;
+                        font-size: 12px;
+                        font-weight: 600;
+                        color: #000;
                     }
                     .receipt-item-name {
                         white-space: nowrap;
                         overflow: hidden;
                         text-overflow: ellipsis;
+                        font-weight: 700;
                     }
                     .receipt-total {
-                        font-weight: bold;
-                        font-size: 14px;
+                        font-weight: 900;
+                        font-size: 16px;
+                        color: #000;
                     }
-                    .receipt-footer { margin-top: 8px; }
+                    .receipt-footer { margin-top: 10px; }
                     .receipt-footer-text {
                         text-align: center;
-                        font-size: 11px;
-                        margin-bottom: 3px;
+                        font-size: 12px;
+                        font-weight: 700;
+                        margin-bottom: 4px;
+                        color: #000;
                     }
                     @media print {
+                        * { color: #000 !important; }
                         body { width: 80mm; }
                         @page { size: 80mm auto; margin: 0; }
                     }

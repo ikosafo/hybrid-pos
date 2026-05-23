@@ -3,3 +3,4 @@ src/config/constants.php
 config/constants.php
 constants.php
 
+src/config/database.php

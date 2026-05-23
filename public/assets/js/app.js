@@ -67,6 +67,8 @@ const Auth = {
     logout() {
         localStorage.removeItem('pos_token');
         localStorage.removeItem('pos_user');
+        // Clear saved page so next login starts fresh at POS
+        localStorage.removeItem('pos_current_page');
         this.user = null;
         this.showLogin();
         Toast.show('Logged out successfully', 'info');
@@ -189,7 +191,10 @@ const Router = {
                 this.navigate(link.dataset.page);
             });
         });
-        this.navigate('pos');
+
+        // ── Restore last visited page, fall back to 'pos' ──
+        const saved = localStorage.getItem('pos_current_page') || 'pos';
+        this.navigate(saved);
     },
 
     navigate(page) {
@@ -202,6 +207,9 @@ const Router = {
         }
 
         this.currentPage = page;
+
+        // ── Persist so a hard reload returns here ──
+        localStorage.setItem('pos_current_page', page);
 
         document.querySelectorAll('.nav-item').forEach(i =>
             i.classList.remove('active'));
