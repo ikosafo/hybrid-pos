@@ -1256,7 +1256,7 @@ const OrdersHistoryPage = {
         const q = v => `"${String(v==null?'':v).replace(/"/g,'""')}"`;
         const rows = [];
 
-        rows.push(['HYBRIDPOS - ORDERS AUDIT REPORT']);
+        rows.push(['BEST COBB - ORDERS AUDIT REPORT']);
         if (isMine) rows.push([`Cashier: ${this._currentUserName} (My Sales Only)`]);
         rows.push([`Generated: ${new Date().toLocaleString('en-GB')}`]);
         rows.push([]);
@@ -1393,7 +1393,7 @@ const OrdersHistoryPage = {
     ${isMine ? `<div><span class="cashier-badge">&#x1F464; ${this._currentUserName} — My Sales Only</span></div>` : ''}
     <div class="sub" style="margin-top:6px;">Generated: ${new Date().toLocaleString('en-GB')}
       &nbsp;·&nbsp; ${orders.length} orders in selection
-      &nbsp;·&nbsp; HybridPOS</div>
+      &nbsp;·&nbsp; Best Cobb</div>
   </div>
   <div style="text-align:right;font-size:11px;color:#555;line-height:1.6;">
     <strong>Total Revenue</strong><br>
@@ -1518,7 +1518,7 @@ const OrdersHistoryPage = {
 </table>
 
 <div class="footer">
-  <span>HybridPOS · ${isMine ? `My Sales — ${this._currentUserName}` : 'Orders Audit Report'}</span>
+  <span>Best Cobb · ${isMine ? `My Sales — ${this._currentUserName}` : 'Orders Audit Report'}</span>
   <span>Generated ${new Date().toLocaleString('en-GB')} · ${orders.length} orders</span>
 </div>
 
