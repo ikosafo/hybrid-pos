@@ -1,7 +1,7 @@
 <?php
-ini_set('display_errors', 1);
+/* ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
+error_reporting(E_ALL); */
 
 
 // ── Parse URI ─────────────────────────────────
@@ -36,11 +36,7 @@ if (str_starts_with($uri, '/api/')) {
     require_once __DIR__ . '/../src/helpers/SyncHelper.php';
 
     // ── CORS ──────────────────────────────────
-    $allowedOrigins = [
-        'http://hybridpos.local',
-        'https://bestcobb.shop',
-        'http://bestcobb.shop',
-    ];
+    $allowedOrigins = ALLOWED_ORIGINS;
 
     $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
     if (in_array($origin, $allowedOrigins)) {
@@ -50,7 +46,7 @@ if (str_starts_with($uri, '/api/')) {
     }
 
     header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
-    header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With');
+    header('Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, X-Sync-Key');
     header('Access-Control-Allow-Credentials: true');
 
     if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {

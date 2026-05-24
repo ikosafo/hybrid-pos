@@ -12,5 +12,5 @@ define('SYNC_API_KEY', 'hybridpos-sync-key-bestcobb-2026');
 // CORS origins allowed
 define('ALLOWED_ORIGINS', [
     'http://hybridpos.local',
-    'https://yourliveurl.com', // replace with your live domain
+    'https://bestcobb.shop', // replace with your live domain
 ]);

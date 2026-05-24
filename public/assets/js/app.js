@@ -10,11 +10,9 @@ const Auth = {
         const token = localStorage.getItem('pos_token');
         const user  = localStorage.getItem('pos_user');
         
-        // Validate both token and user exist AND user is valid JSON
         if (token && user) {
             try {
                 const parsedUser = JSON.parse(user);
-                // Additional validation to ensure parsed user has required properties
                 if (parsedUser && parsedUser.name && parsedUser.role) {
                     this.user = parsedUser;
                     this.showApp();
@@ -25,14 +23,12 @@ const Auth = {
                     localStorage.removeItem('pos_user');
                 }
             } catch (e) {
-                // Invalid JSON in localStorage
                 console.warn('Invalid user data in localStorage, clearing...');
                 localStorage.removeItem('pos_token');
                 localStorage.removeItem('pos_user');
             }
         }
         
-        // Default: show login screen
         this.showLogin();
     },
 
@@ -40,7 +36,6 @@ const Auth = {
     async login(email, password) {
         const res = await API.post('/auth/login', { email, password });
         if (res && res.success) {
-            // Fix null name - use email or role as fallback
             if (!res.data.user.name) {
                 res.data.user.name = res.data.user.email.split('@')[0] || 'User';
             }
@@ -49,12 +44,7 @@ const Auth = {
             localStorage.setItem('pos_user', JSON.stringify(res.data.user));
             this.user = res.data.user;
 
-            // Store for sync engine
-            if (typeof SyncEngine !== 'undefined') {
-                SyncEngine.setSyncPassword(password);
-                localStorage.setItem('sync_live_url', 'https://bestcobb.shop');
-                localStorage.setItem('sync_live_email', email);
-            }
+            // ── Sync engine uses X-Sync-Key only — no credentials needed ──
 
             this.showApp();
             Toast.show('Welcome back, ' + this.user.name + '!', 'success');
@@ -67,7 +57,6 @@ const Auth = {
     logout() {
         localStorage.removeItem('pos_token');
         localStorage.removeItem('pos_user');
-        // Clear saved page so next login starts fresh at POS
         localStorage.removeItem('pos_current_page');
         this.user = null;
         this.showLogin();
@@ -83,7 +72,6 @@ const Auth = {
 
 
     async showApp() {
-        // Guard clause - don't proceed if no valid user
         if (!this.user || !this.user.name) {
             console.warn('showApp called without valid user');
             this.showLogin();
@@ -101,20 +89,16 @@ const Auth = {
 
         await new Promise(resolve => setTimeout(resolve, 50));
         Clock.start();
-        
 
-        // Init cache manager
         if (typeof SyncManager !== 'undefined') {
             await SyncManager.init();
             SyncManager.cacheAllData();
         }
 
-        // Check DB mode
         if (typeof API !== 'undefined') {
             API.checkDBMode();
         }
 
-        // Init sync engine (only runs on hybridpos.local)
         if (typeof SyncEngine !== 'undefined') {
             SyncEngine.init();
         }
@@ -134,7 +118,6 @@ const Auth = {
             return;
         }
         
-        // Fix null name
         if (!u.name) {
             u.name = (u.email ? u.email.split('@')[0] : 'User');
         }
@@ -142,15 +125,14 @@ const Auth = {
         const initials = u.name.split(' ')
             .map(n => n[0]).join('').substring(0, 2).toUpperCase();
             
-        const userAvatar = document.getElementById('user-avatar');
+        const userAvatar      = document.getElementById('user-avatar');
         const sidebarUserName = document.getElementById('sidebar-user-name');
         const sidebarUserRole = document.getElementById('sidebar-user-role');
         
-        if (userAvatar) userAvatar.textContent = initials;
+        if (userAvatar)      userAvatar.textContent      = initials;
         if (sidebarUserName) sidebarUserName.textContent = u.name;
         if (sidebarUserRole) sidebarUserRole.textContent = u.role || '';
 
-        // Hide nav items based on permissions
         document.querySelectorAll('.nav-item[data-page]').forEach(item => {
             const page = item.dataset.page;
             if (!Permissions.canAccess(page)) {
@@ -177,7 +159,7 @@ const Router = {
         products:   { title: 'Products',         load: () => ProductsPage.load()      },
         categories: { title: 'Categories',       load: () => CategoriesPage.load()    },
         customers:  { title: 'Customers',        load: () => CustomersPage.load()     },
-        orders:     { title: 'Orders',           load: () => OrdersPage.load()        },
+        orders:     { title: 'Orders',           load: () => OrdersHistoryPage.load() },
         stock:      { title: 'Stock Management', load: () => StockPage.load()         },
         expenses:   { title: 'Expense Tracking', load: () => ExpensesPage.load()      },
         reports:    { title: 'Reports',          load: () => ReportsPage.load()       },
@@ -192,7 +174,6 @@ const Router = {
             });
         });
 
-        // ── Restore last visited page, fall back to 'pos' ──
         const saved = localStorage.getItem('pos_current_page') || 'pos';
         this.navigate(saved);
     },
@@ -200,32 +181,24 @@ const Router = {
     navigate(page) {
         if (!this.pages[page]) page = 'pos';
 
-        // Check permission
         if (!Permissions.canAccess(page)) {
             Toast.show('You do not have permission to access this page', 'warning');
             page = 'pos';
         }
 
         this.currentPage = page;
-
-        // ── Persist so a hard reload returns here ──
         localStorage.setItem('pos_current_page', page);
 
         document.querySelectorAll('.nav-item').forEach(i =>
             i.classList.remove('active'));
-        const activeLink = document.querySelector(
-            `.nav-item[data-page="${page}"]`);
+        const activeLink = document.querySelector(`.nav-item[data-page="${page}"]`);
         if (activeLink) activeLink.classList.add('active');
 
         const pageTitle = document.getElementById('page-title');
-        if (pageTitle) {
-            pageTitle.textContent = this.pages[page].title;
-        }
+        if (pageTitle) pageTitle.textContent = this.pages[page].title;
         
         const sidebar = document.getElementById('sidebar');
-        if (sidebar) {
-            sidebar.classList.remove('mobile-open');
-        }
+        if (sidebar) sidebar.classList.remove('mobile-open');
 
         const content = document.getElementById('page-content');
         if (content) {
@@ -264,9 +237,7 @@ const Toast = {
         `;
         container.appendChild(toast);
         setTimeout(() => {
-            if (toast.parentElement) {
-                toast.remove();
-            }
+            if (toast.parentElement) toast.remove();
         }, duration);
     }
 };
@@ -286,9 +257,7 @@ const Modal = {
 
     close() {
         const container = document.getElementById('modals-container');
-        if (container) {
-            container.innerHTML = '';
-        }
+        if (container) container.innerHTML = '';
     },
 
     confirm(message, onConfirm, title = 'Confirm Action') {
@@ -334,7 +303,7 @@ const Clock = {
         const tick = () => {
             const el = document.getElementById('topbar-time');
             if (!el) return;
-            const now  = new Date();
+            const now = new Date();
             el.textContent = now.toLocaleTimeString([], {
                 hour: '2-digit', minute: '2-digit'
             });
@@ -353,9 +322,7 @@ const Network = {
             const badge  = document.getElementById('connection-badge');
 
             if (badge) {
-                badge.className = online
-                    ? 'online-badge'
-                    : 'online-badge offline';
+                badge.className = online ? 'online-badge' : 'online-badge offline';
                 badge.innerHTML = `
                     <i class="fas fa-circle"></i>
                     ${online ? 'Online' : 'Offline'}`;
@@ -376,73 +343,72 @@ const Network = {
 const Permissions = {
     rules: {
         superadmin: {
-            // Can do everything
-            dashboard:    true,
-            pos:          true,
-            orders:       true,
-            orders_void:  true,
-            products:     true,
-            products_add: true,
-            products_edit:true,
+            dashboard:       true,
+            pos:             true,
+            orders:          true,
+            orders_void:     true,
+            products:        true,
+            products_add:    true,
+            products_edit:   true,
             products_delete: true,
-            categories:   true,
-            customers:    true,
-            stock:        true,
-            expenses:     true,
-            reports:      true,
-            settings:     true,
-            users:        true,
+            categories:      true,
+            customers:       true,
+            stock:           true,
+            expenses:        true,
+            reports:         true,
+            settings:        true,
+            users:           true,
         },
         admin: {
-            dashboard:    true,
-            pos:          true,
-            orders:       true,
-            orders_void:  true,
-            products:     true,
-            products_add: true,
-            products_edit:true,
+            dashboard:       true,
+            pos:             true,
+            orders:          true,
+            orders_void:     true,
+            products:        true,
+            products_add:    true,
+            products_edit:   true,
             products_delete: true,
-            categories:   true,
-            customers:    true,
-            stock:        true,
-            expenses:     true,
-            reports:      true,
-            settings:     true,
-            users:        true,
+            categories:      true,
+            customers:       true,
+            stock:           true,
+            expenses:        true,
+            reports:         true,
+            settings:        true,
+            users:           true,
         },
         manager: {
-            dashboard:    true,
-            pos:          true,
-            orders:       true,
-            orders_void:  true,
-            products:     true,
-            products_add: true,
-            products_edit:true,
+            dashboard:       true,
+            pos:             true,
+            orders:          true,
+            orders_void:     true,
+            products:        true,
+            products_add:    true,
+            products_edit:   true,
             products_delete: false,
-            categories:   true,
-            customers:    true,
-            stock:        true,
-            expenses:     true,
-            reports:      true,
-            settings:     false,
-            users:        false,
+            categories:      true,
+            customers:       true,
+            stock:           true,
+            expenses:        true,
+            reports:         true,
+            settings:        false,
+            users:           false,
         },
         cashier: {
-            dashboard:    false,
-            pos:          true,
-            orders:       true,
-            orders_void:  false,
-            products:     false,
-            products_add: false,
-            products_edit:false,
+            dashboard:       false,
+            pos:             true,
+            orders:          true,
+            orders_void:     false,
+            products:        false,
+            products_add:    false,
+            products_edit:   false,
             products_delete: false,
-            categories:   false,
-            customers:    true,
-            stock:        false,
-            expenses:     false,
-            reports:      false,
-            settings:     false,
-            users:        false,
+            categories:      false,
+            customers:       true,
+            stock:           false,
+            expenses:        false,
+            reports:         false,
+            settings:        false,
+            users:           false,
         },
     },
 
@@ -550,7 +516,6 @@ const SettingsPage = {
 // ── Password Reset Requests Check ────────
 async function checkResetRequests() {
     if (!Auth.hasRole('superadmin', 'admin')) return;
-    
     if (typeof API === 'undefined') return;
     
     const res = await API.get('/password-resets');
@@ -569,10 +534,10 @@ async function checkResetRequests() {
 
 // ── Forgot Password ──────────────────────
 function showForgotPassword() {
-    const loginForm = document.getElementById('login-form');
+    const loginForm  = document.getElementById('login-form');
     const loginError = document.getElementById('login-error');
     
-    if (loginForm) loginForm.classList.add('hidden');
+    if (loginForm)  loginForm.classList.add('hidden');
     if (loginError) loginError.classList.add('hidden');
 
     const existing = document.getElementById('forgot-form');
@@ -634,12 +599,11 @@ function showLoginForm() {
     loginPIN = '';
 }
 
-
 function showPINLogin() {
-    const loginForm = document.getElementById('login-form');
+    const loginForm  = document.getElementById('login-form');
     const loginError = document.getElementById('login-error');
     
-    if (loginForm) loginForm.classList.add('hidden');
+    if (loginForm)  loginForm.classList.add('hidden');
     if (loginError) loginError.classList.add('hidden');
 
     const existing = document.getElementById('pin-login-form');
@@ -701,12 +665,10 @@ function showPINLogin() {
     `;
 
     const card = document.querySelector('.auth-card');
-    if (card) {
-        card.insertAdjacentHTML('beforeend', pinHTML);
-    }
+    if (card) card.insertAdjacentHTML('beforeend', pinHTML);
 }
 
-// PIN login state
+// ── PIN Login (login screen) ─────────────
 let loginPIN = '';
 
 function loginPINPress(digit) {
@@ -749,21 +711,15 @@ async function loginPINSubmit() {
         const data = await res.json();
 
         if (data.success) {
-            localStorage.setItem('pos_token',
-                data.data.token);
-            localStorage.setItem('pos_user',
-                JSON.stringify(data.data.user));
+            localStorage.setItem('pos_token', data.data.token);
+            localStorage.setItem('pos_user', JSON.stringify(data.data.user));
             Auth.user = data.data.user;
 
-            // Remove PIN form
             const pinForm = document.getElementById('pin-login-form');
             if (pinForm) pinForm.remove();
 
             Auth.showApp();
-            Toast.show(
-                `Welcome, ${data.data.user.name}!`,
-                'success'
-            );
+            Toast.show(`Welcome, ${data.data.user.name}!`, 'success');
         } else {
             loginPIN = '';
             updateLoginPINDisplay();
@@ -775,7 +731,6 @@ async function loginPINSubmit() {
         if (errEl) errEl.textContent = 'Error. Try again.';
     }
 }
-
 
 async function sendResetLink() {
     const email  = document.getElementById('forgot-email')?.value.trim();
@@ -800,8 +755,7 @@ async function sendResetLink() {
 
         const data         = await res.json();
         msgBox.textContent = data.message;
-        msgBox.className   = `alert ${data.success
-            ? 'alert-success' : 'alert-error'}`;
+        msgBox.className   = `alert ${data.success ? 'alert-success' : 'alert-error'}`;
     } catch (error) {
         msgBox.textContent = 'An error occurred. Please try again.';
         msgBox.className   = 'alert alert-error';
@@ -809,14 +763,12 @@ async function sendResetLink() {
 }
 
 
-// ── PIN Login ────────────────────────────
+// ── PIN Quick-Switch (in-app) ────────────
 const PINLogin = {
-    pin:          '',
-    maxLength:    6,
-    selectedUser: null,
+    pin:       '',
+    maxLength: 6,
 
     show() {
-        // Show PIN modal
         Modal.show(`
             <div class="modal-overlay">
                 <div class="modal">
@@ -838,7 +790,6 @@ const PINLogin = {
                                 </p>
                             </div>
 
-                            <!-- PIN dots -->
                             <div class="pin-display" id="pin-display">
                                 ${[1,2,3,4,5,6].map(i => `
                                     <div class="pin-dot" id="pin-dot-${i}"></div>
@@ -850,7 +801,6 @@ const PINLogin = {
                                 min-height:20px;text-align:center;">
                             </div>
 
-                            <!-- Keypad -->
                             <div class="pin-keypad">
                                 ${[1,2,3,4,5,6,7,8,9].map(n => `
                                     <button class="pin-key"
@@ -871,22 +821,17 @@ const PINLogin = {
                             </div>
                         </div>
                     </div>
-                    <div class="modal-footer"
-                        style="justify-content:center;">
+                    <div class="modal-footer" style="justify-content:center;">
                         <button class="btn btn-ghost btn-sm"
-                            onclick="Modal.close()">
-                            Cancel
-                        </button>
+                            onclick="Modal.close()">Cancel</button>
                     </div>
                 </div>
             </div>
         `);
 
-        // Reset state
         this.pin = '';
         this.updateDisplay();
 
-        // Keyboard support
         this._handleKeydown = this.handleKeydown.bind(this);
         document.addEventListener('keydown', this._handleKeydown);
     },
@@ -905,9 +850,6 @@ const PINLogin = {
         if (this.pin.length >= this.maxLength) return;
         this.pin += digit;
         this.updateDisplay();
-
-        // Auto submit when PIN reaches 4 digits
-        // (for 4-digit PINs)
         if (this.pin.length === 4) {
             setTimeout(() => {
                 if (this.pin.length === 4) this.submit();
@@ -925,9 +867,7 @@ const PINLogin = {
     updateDisplay() {
         for (let i = 1; i <= 6; i++) {
             const dot = document.getElementById(`pin-dot-${i}`);
-            if (dot) {
-                dot.classList.toggle('filled', i <= this.pin.length);
-            }
+            if (dot) dot.classList.toggle('filled', i <= this.pin.length);
         }
     },
 
@@ -947,31 +887,17 @@ const PINLogin = {
             const data = await res.json();
 
             if (data.success) {
-                // Switch user
                 localStorage.setItem('pos_token', data.data.token);
-                localStorage.setItem('pos_user',
-                    JSON.stringify(data.data.user));
+                localStorage.setItem('pos_user', JSON.stringify(data.data.user));
                 Auth.user = data.data.user;
-
-                // Store sync password hint
-                if (typeof SyncEngine !== 'undefined') {
-                    localStorage.setItem('sync_live_email',
-                        data.data.user.email);
-                }
 
                 Modal.close();
                 if (this._handleKeydown) {
                     document.removeEventListener('keydown', this._handleKeydown);
                 }
 
-                // Update UI
                 Auth.populateUserUI();
-                Toast.show(
-                    `Switched to ${data.data.user.name}`,
-                    'success', 3000
-                );
-
-                // Navigate to POS
+                Toast.show(`Switched to ${data.data.user.name}`, 'success', 3000);
                 Router.navigate('pos');
 
             } else {
@@ -979,13 +905,10 @@ const PINLogin = {
                 this.updateDisplay();
                 if (errEl) errEl.textContent = 'Invalid PIN. Try again.';
 
-                // Shake animation
                 const display = document.getElementById('pin-display');
                 if (display) {
                     display.style.animation = 'shake 0.3s ease';
-                    setTimeout(() => {
-                        display.style.animation = '';
-                    }, 300);
+                    setTimeout(() => { display.style.animation = ''; }, 300);
                 }
             }
         } catch (e) {
@@ -1012,7 +935,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (loginForm) {
         loginForm.addEventListener('submit', async e => {
             e.preventDefault();
-            const btn     = document.getElementById('login-btn');
+            const btn = document.getElementById('login-btn');
             if (!btn) return;
             
             const btnText = btn.querySelector('.btn-text');
@@ -1020,12 +943,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const errBox  = document.getElementById('login-error');
 
             if (btnText) btnText.classList.add('hidden');
-            if (loader) loader.classList.remove('hidden');
+            if (loader)  loader.classList.remove('hidden');
             btn.disabled = true;
-            if (errBox) errBox.classList.add('hidden');
+            if (errBox)  errBox.classList.add('hidden');
 
             try {
-                const emailInput = document.getElementById('login-email');
+                const emailInput    = document.getElementById('login-email');
                 const passwordInput = document.getElementById('login-password');
                 
                 if (emailInput && passwordInput) {
@@ -1038,7 +961,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             } finally {
                 if (btnText) btnText.classList.remove('hidden');
-                if (loader) loader.classList.add('hidden');
+                if (loader)  loader.classList.add('hidden');
                 btn.disabled = false;
             }
         });

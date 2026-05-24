@@ -23,8 +23,8 @@ addRoute('POST', '/api/auth/login', function () {
 
     $token = JWT::generate([
         'user_id' => $user['id'],
-        'uuid'    => $user['uuid'],
-        'name'    => $user['name'],
+        'uuid' => $user['uuid'] ?? null,
+        'name' => $user['name'] ?? null,
         'email'   => $user['email'],
         'role'    => $user['role'],
     ]);

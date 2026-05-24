@@ -6,6 +6,7 @@
 
 const SyncEngine = {
     LIVE_URL:      'https://bestcobb.shop/public/api',
+    SYNC_KEY:      'hybridpos-sync-key-bestcobb-2026',
     SYNC_INTERVAL: 60000, // 60 seconds
     isSyncing:     false,
     lastSyncTime:  null,
@@ -56,30 +57,25 @@ const SyncEngine = {
         console.log('[SyncEngine] Starting sync...');
 
         try {
-            const liveToken = await this.getLiveToken();
-            if (!liveToken) {
-                throw new Error('Could not authenticate with live server');
-            }
-
             // Check if local DB is empty — do full sync
             const isFirstSync = await this.isFirstSync();
 
             if (isFirstSync) {
                 console.log('[SyncEngine] First sync detected — pulling all data from live');
                 Toast.show('Setting up local database...', 'info', 3000);
-                await this.pullFromLive(liveToken, '1970-01-01 00:00:00');
-                await this.pushToLive(liveToken);
+                await this.pullFromLive('1970-01-01 00:00:00');
+                await this.pushToLive();
             } else {
                 // Normal sync
-                await this.pushToLive(liveToken);
-                await this.pullFromLive(liveToken);
+                await this.pushToLive();
+                await this.pullFromLive();
             }
 
             this.lastSyncTime = new Date();
             this.saveLastSyncTime();
             this.updateSyncUI('synced');
 
-            // Refresh current page after sync
+            // Refresh current page after first sync
             if (isFirstSync) {
                 Toast.show('Local database ready!', 'success', 3000);
                 setTimeout(() => Router.navigate(Router.currentPage || 'pos'), 1000);
@@ -95,16 +91,13 @@ const SyncEngine = {
         }
     },
 
-    // Check if local DB needs initial sync
+    // ── Check if local DB needs initial sync ─
     async isFirstSync() {
         try {
             const res = await API.get('/sync/status');
             if (!res?.success) return false;
 
-            const status = res.data.status;
-
-            // If all tables are empty — it's a first sync
-            const totalRecords = Object.values(status)
+            const totalRecords = Object.values(res.data.status)
                 .reduce((sum, table) => sum + parseInt(table.total || 0), 0);
 
             console.log('[SyncEngine] Total local records:', totalRecords);
@@ -114,51 +107,16 @@ const SyncEngine = {
         }
     },
 
-    // ── Get live server auth token ───────────
-    async getLiveToken() {
-        console.log('[SyncEngine] getLiveToken called');
-        const cached = localStorage.getItem('live_sync_token');
-        const expiry = localStorage.getItem('live_sync_token_expiry');
-
-        if (cached && expiry && new Date() < new Date(expiry)) {
-            return cached;
-        }
-
-        // Get credentials — from sync config or stored login
-        const liveUrl  = localStorage.getItem('sync_live_url')
-            || 'https://bestcobb.shop';
-        const email    = localStorage.getItem('sync_live_email')
-            || JSON.parse(localStorage.getItem('pos_user') || '{}').email;
-        const password = localStorage.getItem('sync_pass');
-
-        if (!email || !password) {
-            console.warn('[SyncEngine] No sync credentials available');
-            return null;
-        }
-
-        try {
-            const res = await fetch(`${liveUrl}/public/api/auth/login`, {
-                method:  'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ email, password }),
-            });
-
-            const data = await res.json();
-            if (data.success) {
-                const token  = data.data.token;
-                const expiry = new Date(Date.now() + 23 * 60 * 60 * 1000);
-                localStorage.setItem('live_sync_token', token);
-                localStorage.setItem('live_sync_token_expiry', expiry.toISOString());
-                return token;
-            }
-        } catch (e) {
-            console.error('[SyncEngine] Live auth failed:', e);
-        }
-        return null;
+    // ── Sync headers (X-Sync-Key only, no JWT) ──
+    _headers() {
+        return {
+            'Content-Type': 'application/json',
+            'X-Sync-Key':   this.SYNC_KEY,
+        };
     },
 
     // ── Push local data to live ──────────────
-    async pushToLive(liveToken) {
+    async pushToLive() {
         const entities = [
             'users',
             'categories',
@@ -170,9 +128,9 @@ const SyncEngine = {
         ];
 
         for (const entity of entities) {
-            console.log(`[DEBUG] pushToLive: trying ${entity}`);  // ← ADD THIS
+            console.log(`[DEBUG] pushToLive: trying ${entity}`);
             try {
-                await this.pushEntity(entity, liveToken);
+                await this.pushEntity(entity);
             } catch (e) {
                 console.error(`[SyncEngine] Push failed for ${entity}:`, e);
             }
@@ -180,7 +138,7 @@ const SyncEngine = {
     },
 
     // ── Push single entity to live ───────────
-    async pushEntity(entityType, liveToken) {
+    async pushEntity(entityType) {
         // Get ONLY unsynced records from local
         const localRes = await API.get(
             `/sync/pull?entity_type=${entityType}&since=1970-01-01&unsynced_only=true`
@@ -191,7 +149,6 @@ const SyncEngine = {
         if (!localRes?.success || !localRes.data.records.length) return;
 
         const records = localRes.data.records;
-        if (!records.length) return;
 
         console.log(`[SyncEngine] Pushing ${records.length} ${entityType} to live`);
 
@@ -202,26 +159,18 @@ const SyncEngine = {
         // Send to live server
         const res = await fetch(`${this.LIVE_URL}/sync/push`, {
             method:  'POST',
-            headers: {
-                'Content-Type':  'application/json',
-                'Authorization': `Bearer ${liveToken}`,
-            },
-            body: JSON.stringify({
-                entity_type: entityType,
-                records,
-            }),
+            headers: this._headers(),
+            body:    JSON.stringify({ entity_type: entityType, records }),
         });
 
         const data = await res.json();
-        
-        // Only acknowledge if records were actually synced
+        console.log(`[DEBUG] Push response:`, JSON.stringify(data));
+
         if (data.success && data.data.synced > 0) {
             console.log(`[SyncEngine] Pushed ${data.data.synced} ${entityType}`);
 
-            // Only acknowledge the records that were successfully synced
-            const syncedCount = data.data.synced;
+            // Acknowledge the synced records so they are marked is_synced=1 locally
             const uuids = records
-                .slice(0, syncedCount)  // Only mark the ones that synced
                 .filter(r => r.uuid)
                 .map(r => r.uuid);
 
@@ -237,7 +186,7 @@ const SyncEngine = {
     },
 
     // ── Pull live data to local ──────────────
-    async pullFromLive(liveToken, forceSince = null) {
+    async pullFromLive(forceSince = null) {
         const entities = [
             'users',
             'categories',
@@ -254,7 +203,7 @@ const SyncEngine = {
 
         for (const entity of entities) {
             try {
-                await this.pullEntity(entity, liveToken, since);
+                await this.pullEntity(entity, since);
             } catch (e) {
                 console.error(`[SyncEngine] Pull failed for ${entity}:`, e);
             }
@@ -262,12 +211,10 @@ const SyncEngine = {
     },
 
     // ── Pull single entity from live ─────────
-    async pullEntity(entityType, liveToken, since) {
+    async pullEntity(entityType, since) {
         const res = await fetch(
             `${this.LIVE_URL}/sync/pull?entity_type=${entityType}&since=${encodeURIComponent(since)}`,
-            {
-                headers: { 'Authorization': `Bearer ${liveToken}` }
-            }
+            { headers: this._headers() }
         );
 
         const data = await res.json();
@@ -324,7 +271,7 @@ const SyncEngine = {
     formatSyncTime() {
         if (!this.lastSyncTime) return '';
         const diff = Math.floor((new Date() - this.lastSyncTime) / 1000);
-        if (diff < 60)  return 'just now';
+        if (diff < 60)   return 'just now';
         if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
         return `${Math.floor(diff / 3600)}h ago`;
     },
@@ -353,10 +300,5 @@ const SyncEngine = {
         Toast.show('Syncing with live server...', 'info', 2000);
         await this.sync();
         Toast.show('Sync complete!', 'success');
-    },
-
-    // ── Store sync password securely ─────────
-    setSyncPassword(password) {
-        localStorage.setItem('sync_pass', password);
     },
 };

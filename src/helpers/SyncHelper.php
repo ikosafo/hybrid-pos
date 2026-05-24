@@ -44,25 +44,55 @@ class SyncHelper {
 
     private static function upsertOrder(mysqli $conn, array $r): bool {
         try {
-            // Check if order already exists
             $checkStmt = $conn->prepare('SELECT id FROM orders WHERE uuid = ?');
             $checkStmt->bind_param('s', $r['uuid']);
             $checkStmt->execute();
             $existing = $checkStmt->get_result()->fetch_assoc();
             $checkStmt->close();
-            
-            $isSynced = $existing ? 1 : 1; // Always 1 when coming from sync
-            
+
             if ($existing) {
-                // Update existing order
+                // Order already exists — just update status and mark synced
                 $stmt = $conn->prepare('UPDATE orders SET status=?, is_synced=1, synced_at=NOW() WHERE id=?');
                 $stmt->bind_param('si', $r['status'], $existing['id']);
                 $stmt->execute();
                 $orderId = $existing['id'];
                 $stmt->close();
             } else {
-                // Insert new order
-                $customerId = !empty($r['customer_id']) ? (int)$r['customer_id'] : 0;
+                // ── Resolve cashier_id from cashier_uuid ──────────────────
+                // IDs differ between local and live servers — always use UUID
+                $cashierId = null;
+                if (!empty($r['cashier_uuid'])) {
+                    $cs = $conn->prepare('SELECT id FROM users WHERE uuid = ? LIMIT 1');
+                    $cs->bind_param('s', $r['cashier_uuid']);
+                    $cs->execute();
+                    $cu = $cs->get_result()->fetch_assoc();
+                    $cs->close();
+                    $cashierId = $cu['id'] ?? null;
+                }
+                // Fall back to raw cashier_id if UUID lookup failed
+                if (!$cashierId && !empty($r['cashier_id'])) {
+                    $cashierId = (int)$r['cashier_id'];
+                }
+
+                // ── customer_id: NULL for guests ──────────────────────────
+                // Inserting 0 breaks FK constraints on live server
+                $customerId = (!empty($r['customer_id']) && $r['customer_id'] > 0)
+                    ? (int)$r['customer_id'] : null;
+
+                $notes          = $r['notes'] ?? null;
+                $uuid           = $r['uuid'];
+                $orderNumber    = $r['order_number'];
+                $status         = $r['status'];
+                $subtotal       = (float)$r['subtotal'];
+                $discountAmount = (float)$r['discount_amount'];
+                $discountType   = $r['discount_type'];
+                $taxAmount      = (float)$r['tax_amount'];
+                $totalAmount    = (float)$r['total_amount'];
+                $amountTendered = (float)$r['amount_tendered'];
+                $changeDue      = (float)$r['change_due'];
+                $paymentMethod  = $r['payment_method'];
+                $createdAt      = $r['created_at'];
+
                 $stmt = $conn->prepare('
                     INSERT INTO orders (
                         uuid, order_number, customer_id, cashier_id,
@@ -71,29 +101,26 @@ class SyncHelper {
                         payment_method, notes, is_synced, created_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
                 ');
-                $notes = $r['notes'] ?? '';
                 $stmt->bind_param(
                     'ssiisddsddddsss',
-                    $r['uuid'], $r['order_number'],
-                    $customerId, $r['cashier_id'],
-                    $r['status'],
-                    $r['subtotal'], $r['discount_amount'], $r['discount_type'],
-                    $r['tax_amount'], $r['total_amount'],
-                    $r['amount_tendered'], $r['change_due'],
-                    $r['payment_method'], $notes,
-                    $r['created_at']
+                    $uuid, $orderNumber,
+                    $customerId, $cashierId,
+                    $status,
+                    $subtotal, $discountAmount, $discountType,
+                    $taxAmount, $totalAmount,
+                    $amountTendered, $changeDue,
+                    $paymentMethod, $notes,
+                    $createdAt
                 );
                 $stmt->execute();
                 $orderId = $conn->insert_id;
                 $stmt->close();
             }
-            
-            // Sync order items
+
+            // ── Sync order items ──────────────────────────────────────────
             if (!empty($r['items']) && $orderId > 0) {
-                // Delete existing items
                 $conn->query("DELETE FROM order_items WHERE order_id = {$orderId}");
-                
-                // Insert items
+
                 $itemStmt = $conn->prepare('
                     INSERT INTO order_items (order_id, product_id, product_name, unit_price, quantity, total)
                     VALUES (?, ?, ?, ?, ?, ?)
@@ -111,7 +138,7 @@ class SyncHelper {
                 }
                 $itemStmt->close();
             }
-            
+
             return true;
         } catch (Exception $e) {
             error_log('[SyncHelper] upsertOrder failed: ' . $e->getMessage());
@@ -152,15 +179,14 @@ class SyncHelper {
     }
 
     private static function upsertProduct(mysqli $conn, array $r): bool {
-        // Check if exists
         $checkStmt = $conn->prepare('SELECT id, is_synced FROM products WHERE uuid = ?');
         $checkStmt->bind_param('s', $r['uuid']);
         $checkStmt->execute();
         $existing = $checkStmt->get_result()->fetch_assoc();
         $checkStmt->close();
-        
-        $isSynced = $existing ? $existing['is_synced'] : 1; // New from sync = synced
-        
+
+        $isSynced = $existing ? $existing['is_synced'] : 1;
+
         // Resolve category_id from category_uuid
         $categoryId = null;
         if (!empty($r['category_uuid'])) {
@@ -212,13 +238,13 @@ class SyncHelper {
         $updatedAt     = $r['updated_at'];
 
         $stmt->bind_param(
-            'sissssdddissii',
+            'sissssdddiissis',
             $uuid, $categoryId, $name,
             $sku, $barcode, $description,
             $price, $costPrice, $stockQty,
             $lowStockAlert, $unit,
             $isActive, $trackStock,
-            $isSynced,  // ← Dynamic
+            $isSynced,
             $updatedAt
         );
 
@@ -247,10 +273,7 @@ class SyncHelper {
         $icon     = $r['icon'];
         $isActive = (int)$r['is_active'];
 
-        $stmt->bind_param(
-            'ssssi',
-            $uuid, $name, $color, $icon, $isActive
-        );
+        $stmt->bind_param('ssssi', $uuid, $name, $color, $icon, $isActive);
 
         $stmt->execute();
         $affected = $stmt->affected_rows;
@@ -463,10 +486,7 @@ class SyncHelper {
         if ($entityType === 'orders') {
             foreach ($results as &$order) {
                 if (!empty($order['items_json'])) {
-                    $decoded        = json_decode(
-                        '[' . $order['items_json'] . ']', true
-                    );
-                    $order['items'] = $decoded ?? [];
+                    $order['items'] = json_decode('[' . $order['items_json'] . ']', true) ?? [];
                 } else {
                     $order['items'] = [];
                 }
@@ -499,7 +519,6 @@ class SyncHelper {
             $stmt->close();
             return $affected;
         } catch (Exception $e) {
-            // Column might not exist — ignore silently
             error_log('[SyncHelper] markSynced failed for ' . $table . ': ' . $e->getMessage());
             return 0;
         }
@@ -511,10 +530,10 @@ class SyncHelper {
             INSERT INTO users (uuid, name, email, role, pin, is_active)
             VALUES (?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
-                name      = VALUES(name),
-                role      = VALUES(role),
-                pin       = VALUES(pin),
-                is_active = VALUES(is_active),
+                name       = VALUES(name),
+                role       = VALUES(role),
+                pin        = VALUES(pin),
+                is_active  = VALUES(is_active),
                 updated_at = NOW()
         ');
 
@@ -541,12 +560,12 @@ class SyncHelper {
     public static function getRecordsByUuids(string $entityType, array $uuids): array {
         $conn  = getDBConnection();
         $table = self::$syncTables[$entityType] ?? null;
-        
+
         if (!$table || empty($uuids)) return [];
-        
+
         $placeholders = implode(',', array_fill(0, count($uuids), '?'));
         $types        = str_repeat('s', count($uuids));
-        
+
         $query = match($entityType) {
             'orders' => "
                 SELECT o.*,
@@ -574,14 +593,13 @@ class SyncHelper {
             ",
             default => "SELECT * FROM {$table} WHERE uuid IN ({$placeholders})"
         };
-        
+
         $stmt = $conn->prepare($query);
         $stmt->bind_param($types, ...$uuids);
         $stmt->execute();
         $results = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
         $stmt->close();
-        
-        // Process orders items_json
+
         if ($entityType === 'orders') {
             foreach ($results as &$order) {
                 if (!empty($order['items_json'])) {
@@ -592,7 +610,7 @@ class SyncHelper {
                 unset($order['items_json']);
             }
         }
-        
+
         return $results;
     }
 }

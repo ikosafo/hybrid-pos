@@ -1,13 +1,22 @@
 <?php
 // ═══════════════════════════════════════════
 //  HybridPOS — Sync API
-//  Handles bidirectional sync between
-//  hybridpos.local and bestcobb.shop
 // ═══════════════════════════════════════════
 
-// POST /api/sync/push — Local pushes data to Live
+// Helper to authenticate sync requests
+// Accepts X-Sync-Key (cross-server) OR JWT token (internal local calls)
+function syncAuth(): void {
+    // X-Sync-Key via $_SERVER — works on all Apache/CGI setups
+    $syncKey = $_SERVER['HTTP_X_SYNC_KEY'] ?? '';
+    if ($syncKey === SYNC_API_KEY) return;
+
+    // Fall back to JWT — used when local server calls its own sync routes
+    AuthMiddleware::handle();
+}
+
+// POST /api/sync/push
 addRoute('POST', '/api/sync/push', function () {
-    $auth = AuthMiddleware::handle();
+    syncAuth();
     $body = json_decode(file_get_contents('php://input'), true);
 
     if (empty($body['entity_type'])) {
@@ -41,14 +50,14 @@ addRoute('POST', '/api/sync/push', function () {
     ], "Synced {$synced} of " . count($records) . " records");
 });
 
-// GET /api/sync/pull — Local pulls data from Live
+// GET /api/sync/pull
 addRoute('GET', '/api/sync/pull', function () {
-    AuthMiddleware::handle();
+    syncAuth();
 
-    $entityType = $_GET['entity_type'] ?? null;
-    $since      = $_GET['since']       ?? null; // timestamp
-    $limit      = (int)($_GET['limit'] ?? 500);
-    $unsyncedOnly= ($_GET['unsynced_only'] ?? 'false') === 'true';
+    $entityType   = $_GET['entity_type'] ?? null;
+    $since        = $_GET['since']       ?? null;
+    $limit        = (int)($_GET['limit'] ?? 500);
+    $unsyncedOnly = ($_GET['unsynced_only'] ?? 'false') === 'true';
 
     if (!$entityType) Response::error('entity_type is required', 422);
 
@@ -64,7 +73,7 @@ addRoute('GET', '/api/sync/pull', function () {
 
 // GET /api/sync/status
 addRoute('GET', '/api/sync/status', function () {
-    AuthMiddleware::handle();
+    syncAuth();
 
     $conn   = getDBConnection();
     $tables = [
@@ -77,7 +86,6 @@ addRoute('GET', '/api/sync/status', function () {
     ];
 
     $status = [];
-
     foreach ($tables as $table => $dateCol) {
         $result = $conn->query("
             SELECT
@@ -97,9 +105,9 @@ addRoute('GET', '/api/sync/status', function () {
     ]);
 });
 
-// POST /api/sync/acknowledge — Mark records as synced
+// POST /api/sync/acknowledge
 addRoute('POST', '/api/sync/acknowledge', function () {
-    AuthMiddleware::handle();
+    syncAuth();
     $body = json_decode(file_get_contents('php://input'), true);
 
     if (empty($body['entity_type'])) Response::error('entity_type required', 422);
@@ -109,10 +117,9 @@ addRoute('POST', '/api/sync/acknowledge', function () {
     Response::success(['marked' => $synced], 'Records acknowledged');
 });
 
-
-// POST /api/sync/delete — Sync a deletion
+// POST /api/sync/delete
 addRoute('POST', '/api/sync/delete', function () {
-    AuthMiddleware::handle();
+    syncAuth();
     $body = json_decode(file_get_contents('php://input'), true);
 
     if (empty($body['entity_type'])) Response::error('entity_type required', 422);
@@ -147,42 +154,34 @@ addRoute('POST', '/api/sync/delete', function () {
     Response::success(['affected' => $affected], 'Deletion synced');
 });
 
-
-
-// POST /api/sync/receive — Local receives pushed data from Live
+// POST /api/sync/receive
 addRoute('POST', '/api/sync/receive', function () {
-    // Verify sync secret key
-    $headers = getallheaders();
-    $syncKey = $headers['X-Sync-Key'] ?? '';
-    
+    $syncKey = $_SERVER['HTTP_X_SYNC_KEY'] ?? '';
     if ($syncKey !== SYNC_API_KEY) {
         Response::error('Unauthorized', 401);
+        exit;
     }
-    
+
     $body = json_decode(file_get_contents('php://input'), true);
-    
     if (empty($body['entity_type']) || empty($body['uuids'])) {
         Response::error('entity_type and uuids required', 422);
     }
-    
+
     $entityType = $body['entity_type'];
     $uuids      = $body['uuids'];
-    
-    // Pull specific records from live server and upsert locally
-    $records = SyncHelper::getRecordsByUuids($entityType, $uuids);
-    
+    $records    = SyncHelper::getRecordsByUuids($entityType, $uuids);
+
     if (empty($records)) {
         Response::success(['synced' => 0], 'No records found on live');
         return;
     }
-    
-    // Insert/update locally
+
     $synced = 0;
     foreach ($records as $record) {
         $result = SyncHelper::upsert($entityType, $record);
         if ($result) $synced++;
     }
-    
+
     Response::success([
         'synced' => $synced,
         'total'  => count($records),
